@@ -6866,9 +6866,12 @@ function guestCheckPass(pass,stored){
 }
 // ── اتصال بدوال السيرفر (Vercel /api) ──
 const GUEST_API=(function(){const h=location.hostname;return(location.protocol.indexOf('http')===0&&(/\.vercel\.app$/.test(h)||h==='localhost'||h==='127.0.0.1'))?'':'https://laborcost.vercel.app';})();
-function guestApi(path,body){
-  return fetch(GUEST_API+'/api/'+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body||{})})
-    .then(r=>r.json().catch(()=>({})).then(j=>{j._status=r.status;return j;}));
+function guestApi(path,body,ms){
+  const ac=(typeof AbortController!=='undefined')?new AbortController():null;
+  const t=ac?setTimeout(()=>ac.abort(),ms||8000):null;
+  return fetch(GUEST_API+'/api/'+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body||{}),signal:ac?ac.signal:undefined})
+    .then(r=>r.json().catch(()=>({})).then(j=>{j._status=r.status;return j;}))
+    .finally(()=>{if(t)clearTimeout(t);});
 }
 function guestNotify(u){
   // السيرفر يسجّل الدخول (IP حقيقي) ويُرسل الإشعار؛ لو فشل نسجّل الدخول من المتصفح كاحتياط
@@ -6898,44 +6901,57 @@ function showGuestCreds(){
   if(c)c.style.display='block';if(b)b.style.display='none';
   let saved=null;try{saved=JSON.parse(localStorage.getItem('be_guest')||'null');}catch(e){}
   if(saved&&saved.u&&saved.p){
-    _gcFillCreds(saved,null);
-    if(FSDB){FSDB.collection(GUEST_REG).doc(saved.u).get().then(d=>{if(d.exists)_gcFillCreds(saved,d.data());}).catch(()=>{});}
+    _gcFillCreds(saved,saved.exp?{createdAt:saved.at,expiresAt:saved.exp,status:'active'}:null);
+    if(FSDB){FSDB.collection(GUEST_REG).doc(saved.u).get().then(d=>{if(d.exists)_gcFillCreds(saved,d.data());}).catch(()=>{});
+      if(saved.pending&&saved.h)guestSyncRecord({username:saved.u,pw:saved.p,passHash:saved.h,name:'ضيف '+saved.u,phone:'',createdAt:saved.at,expiresAt:saved.exp,status:'active',lastLogin:'',loginCount:0,extendedCount:0,lastNotifyAt:0,deviceId:DEVICE_ID,ip:MY_IP||'',lastIp:'',ua:navigator.userAgent||''});}
   }else _gcStep(1);
+}
+// يولّد يوزر/باسورد تجريبي فوراً (بدون انتظار أي شبكة)
+function _guestMake(){
+  const al='abcdefghjkmnpqrstuvwxyz23456789',rb=new Uint32Array(6);window.crypto.getRandomValues(rb);
+  let pass='';for(let i=0;i<6;i++)pass+=al[rb[i]%al.length];
+  const salt=Array.from(window.crypto.getRandomValues(new Uint8Array(8))).map(x=>('0'+x.toString(16)).slice(-2)).join('');
+  const u='guest'+String(1000+window.crypto.getRandomValues(new Uint32Array(1))[0]%9000);
+  const now=new Date();
+  const rec={username:u,name:'ضيف '+u,phone:'',pw:pass,passHash:'s1$'+salt+'$'+_sha256hex(salt+':'+pass),createdAt:now.toISOString(),
+    expiresAt:new Date(now.getTime()+GUEST_TRIAL_DAYS*86400000).toISOString(),status:'active',lastLogin:'',loginCount:0,extendedCount:0,
+    lastNotifyAt:0,deviceId:DEVICE_ID,ip:MY_IP||'',lastIp:'',ua:navigator.userAgent||''};
+  return rec;
+}
+function _guestSaveLocal(rec,pending){
+  try{localStorage.setItem('be_guest',JSON.stringify({u:rec.username,p:rec.pw,h:rec.passHash,at:rec.createdAt,exp:rec.expiresAt,pending:!!pending}));}catch(e){}
+}
+// مزامنة الحساب مع قاعدة البيانات في الخلفية: السيرفر أولاً (يسجّل الـ IP) ثم Firestore مباشرة
+function guestSyncRecord(rec,cb){
+  const fin=ok=>{
+    try{const sv=JSON.parse(localStorage.getItem('be_guest')||'null');if(sv&&sv.u===rec.username){sv.pending=!ok;localStorage.setItem('be_guest',JSON.stringify(sv));}}catch(e){}
+    if(cb)cb(ok);
+  };
+  const viaSdk=()=>{
+    if(!FSDB){fin(false);return;}
+    FSDB.collection(GUEST_REG).doc(rec.username).set(rec,{merge:true}).then(()=>fin(true),()=>fin(false));
+  };
+  guestApi('guest-register',{username:rec.username,password:rec.pw}).then(j=>{
+    if(j.ok){fin(true);return;}
+    if(j._status===409||j._status===429){fin(j._status);return;}
+    viaSdk();
+  }).catch(viaSdk);
 }
 function guestRegister(){
   const msg=document.getElementById('gc-msg'),btn=document.getElementById('gc-reg-btn');
   const say=t=>{if(msg)msg.textContent=t||'';};
-  if(btn)btn.disabled=true;say('⏳ جارٍ إنشاء حسابك...');
-  const finish=(u,p,rec)=>{
-    if(btn)btn.disabled=false;say('');
-    try{localStorage.setItem('be_guest',JSON.stringify({u,p}));}catch(e){}
-    _gcFillCreds({u,p},rec);
-  };
-  // احتياطي: لو السيرفر لم يستطع الوصول لقاعدة البيانات، نُنشئ الحساب من المتصفح مباشرة
-  const viaClient=()=>{
-    if(!FSDB){if(btn)btn.disabled=false;say('❌ تعذّر إنشاء الحساب — حاول بعد قليل');return;}
-    const reg=FSDB.collection(GUEST_REG);
-    const al='abcdefghjkmnpqrstuvwxyz23456789',rb=new Uint32Array(6);window.crypto.getRandomValues(rb);
-    let pass='';for(let i=0;i<6;i++)pass+=al[rb[i]%al.length];
-    const salt=Array.from(window.crypto.getRandomValues(new Uint8Array(8))).map(x=>('0'+x.toString(16)).slice(-2)).join('');
-    const mk=(n)=>{
-      const uname='guest'+String(1000+window.crypto.getRandomValues(new Uint32Array(1))[0]%9000);
-      return reg.doc(uname).get().then(d=>{
-        if(d.exists){if(n>6)throw new Error('x');return mk(n+1);}
-        const now=new Date();
-        const rec={username:uname,name:'ضيف '+uname,phone:'',pw:pass,passHash:'s1$'+salt+'$'+_sha256hex(salt+':'+pass),createdAt:now.toISOString(),
-          expiresAt:new Date(now.getTime()+GUEST_TRIAL_DAYS*86400000).toISOString(),status:'active',lastLogin:'',loginCount:0,extendedCount:0,
-          lastNotifyAt:0,deviceId:DEVICE_ID,ip:MY_IP||'',lastIp:'',ua:navigator.userAgent||''};
-        return reg.doc(uname).set(rec).then(()=>{const{passHash,pw,...pub}=rec;finish(uname,pass,pub);});
-      });
-    };
-    mk(0).catch(()=>{if(btn)btn.disabled=false;say('❌ تعذّر إنشاء الحساب — تأكد من الاتصال وحاول مرة أخرى');});
-  };
-  guestApi('guest-register',{}).then(j=>{
-    if(j.ok){finish(j.username,j.password,j.record);return;}
-    if(j._status>=500){viaClient();return;}
-    if(btn)btn.disabled=false;say('❌ '+(j.error||'تعذّر التسجيل — حاول مرة أخرى'));
-  }).catch(()=>viaClient());
+  let saved=null;try{saved=JSON.parse(localStorage.getItem('be_guest')||'null');}catch(e){}
+  if(saved&&saved.u&&saved.p){_gcFillCreds({u:saved.u,p:saved.p},null);return;} // عنده حساب على هذا الجهاز
+  let rec=_guestMake();
+  _guestSaveLocal(rec,true);
+  const {passHash,pw,...pub}=rec;
+  _gcFillCreds({u:rec.username,p:rec.pw},pub);   // يظهر فوراً
+  let tries=0;
+  const sync=()=>guestSyncRecord(rec,r=>{
+    if(r===409&&tries++<3){rec=_guestMake();_guestSaveLocal(rec,true);_gcFillCreds({u:rec.username,p:rec.pw},{createdAt:rec.createdAt,expiresAt:rec.expiresAt,status:'active'});sync();}
+    else if(r===429){try{localStorage.removeItem('be_guest');}catch(e){}_gcStep(1);say('❌ تم إنشاء عدد كافٍ من الحسابات التجريبية من هذا الجهاز اليوم — تواصل مع الإدارة: '+GUEST_CONTACT);}
+  });
+  sync();
 }
 function guestLogin(){
   if(!_gcCred)return;
@@ -6948,24 +6964,32 @@ function guestAuthAndStart(id,pass){
   const say=(t,info)=>{if(err){err.style.display='block';err.style.color=info?'#ffd54f':'#ff5252';err.textContent=t;}};
   const BAD='اسم المستخدم أو كلمة المرور غير صحيحة';
   say('⏳ جارٍ التحقق من حساب الضيف...',true);
-  const find=()=>{
-    if(!FSDB)return Promise.reject(new Error('nofs'));
-    return FSDB.collection(GUEST_REG).doc(id).get().then(d=>d.exists?d.data():null);
+  const T=(p,ms)=>Promise.race([p,new Promise((_,rj)=>setTimeout(()=>rj(new Error('timeout')),ms))]);
+  let saved=null;try{saved=JSON.parse(localStorage.getItem('be_guest')||'null');}catch(e){}
+  // حساب أُنشئ على هذا الجهاز ولم يُزامَن بعد (أو القاعدة غير متاحة): نقبله محلياً حتى انتهاء مدته ثم نزامنه
+  const localRec=(needPending)=>{
+    if(!saved||saved.u!==id||saved.p!==pass||!saved.exp||!saved.h)return null;
+    if(needPending&&!saved.pending)return null;
+    return {username:id,name:'ضيف '+id,phone:'',pw:pass,passHash:saved.h,createdAt:saved.at||'',expiresAt:saved.exp,status:'active',lastLogin:'',loginCount:0,extendedCount:0,lastNotifyAt:0,deviceId:DEVICE_ID,ip:MY_IP||'',lastIp:'',ua:navigator.userAgent||''};
   };
   const proceed=(g)=>{
     const st=guestStatus(g);
     if(st!=='active'){say(guestBlockMsg(st));return;}
     if(err){err.style.display='none';err.style.color='#ff5252';}
     const upd={lastLogin:new Date().toISOString(),loginCount:(g.loginCount||0)+1,deviceId:DEVICE_ID,ip:MY_IP||'',ua:navigator.userAgent||''};
-    if(FSDB)FSDB.collection(GUEST_REG).doc(g.username).set(upd,{merge:true}).catch(()=>{});
-    startGuestSession(Object.assign({},g,upd));
+    const full=Object.assign({},g,upd);
+    if(FSDB)FSDB.collection(GUEST_REG).doc(g.username).set(full,{merge:true}).then(()=>{try{const sv=JSON.parse(localStorage.getItem('be_guest')||'null');if(sv&&sv.u===g.username){sv.pending=false;localStorage.setItem('be_guest',JSON.stringify(sv));}}catch(e){}},()=>{});
+    startGuestSession(full);
     guestNotify(g.username);
   };
-  find().then(g=>{
-    if(!g||!guestCheckPass(pass,g.passHash)){say(BAD);return;}
-    proceed(g);
-  },()=>{ // تعذّر الاتصال المباشر بـ Firestore: جرّب عبر السيرفر
-    guestApi('guest-auth',{id,password:pass}).then(j=>{
+  const find=()=>FSDB?FSDB.collection(GUEST_REG).doc(id).get().then(d=>d.exists?d.data():null):Promise.reject(new Error('nofs'));
+  T(find(),4000).then(g=>{
+    if(g){ if(!guestCheckPass(pass,g.passHash)){say(BAD);return;} proceed(g);return; }
+    const l=localRec(true); if(l){proceed(l);return;}
+    say(saved&&saved.u===id&&!saved.pending?'⛔ تم حذف حسابك التجريبي من الإدارة — للتواصل: '+GUEST_CONTACT:BAD);
+  },()=>{ // القاعدة غير متاحة من المتصفح
+    const l=localRec(false); if(l){proceed(l);return;}
+    T(guestApi('guest-auth',{id,password:pass}),7000).then(j=>{
       if(j._status===401){say(BAD);return;}
       if(!j.ok||!j.record){say(j.error||'تعذّر التحقق — تأكد من الاتصال بالإنترنت');return;}
       proceed(j.record);
@@ -7124,9 +7148,11 @@ function startGuestSession(rec){
   const uname=GUEST_REC.username;
   if(FSDB&&uname){
     try{
+      let seen=false;
       GUEST_UNSUB=FSDB.collection(GUEST_REG).doc(uname).onSnapshot(d=>{
         if(!GUEST_MODE||!GUEST_REC||GUEST_REC.username!==uname)return;
-        if(!d.exists){guestKick('⛔ تم حذف حسابك التجريبي من الإدارة — للتواصل: '+GUEST_CONTACT);return;}
+        if(!d.exists){if(seen)guestKick('⛔ تم حذف حسابك التجريبي من الإدارة — للتواصل: '+GUEST_CONTACT);return;}
+        seen=true;
         GUEST_REC=Object.assign({},d.data());
         const st=guestStatus(GUEST_REC);
         if(st!=='active'){guestKick(guestBlockMsg(st));return;}
@@ -7263,37 +7289,24 @@ function adminGuestCreate(){
 function adminGuestCreateGo(){
   if(!can('guestsadm')||!cloudReady||!cloudDb)return;
   let days=parseInt(document.getElementById('gnew-days')?.value,10);if(!(days>=1&&days<=365))days=GUEST_TRIAL_DAYS;
-  const btn=document.getElementById('gnew-go');if(btn)btn.disabled=true;
-  const reg=cloudDb.collection(GUEST_REG);
-  const al='abcdefghjkmnpqrstuvwxyz23456789',rb=new Uint32Array(6);window.crypto.getRandomValues(rb);
-  let pass='';for(let i=0;i<6;i++)pass+=al[rb[i]%al.length];
-  const salt=Array.from(window.crypto.getRandomValues(new Uint8Array(8))).map(x=>('0'+x.toString(16)).slice(-2)).join('');
-  const mk=(n)=>{
-    const uname='guest'+String(1000+window.crypto.getRandomValues(new Uint32Array(1))[0]%9000);
-    return reg.doc(uname).get().then(d=>{
-      if(d.exists){if(n>8)throw new Error('تعذّر توليد يوزر جديد');return mk(n+1);}
-      const now=new Date();
-      const name='ضيف '+uname,phone='';const rec={username:uname,name,phone,pw:pass,passHash:'s1$'+salt+'$'+_sha256hex(salt+':'+pass),createdAt:now.toISOString(),
-        expiresAt:new Date(now.getTime()+days*86400000).toISOString(),status:'active',lastLogin:'',loginCount:0,extendedCount:0,
-        lastNotifyAt:0,deviceId:'',ip:'',lastIp:'',ua:'',createdBy:'admin'};
-      return reg.doc(uname).set(rec).then(()=>({uname,rec}));
-    });
-  };
-  mk(0).then(r=>{
-    const url=(location.protocol.indexOf('http')===0&&/vercel\.app$/.test(location.hostname))?location.origin+'/':'https://laborcost.vercel.app/';
-    const txt='أهلاً 👋\nدي بيانات دخول النسخة التجريبية ('+days+' أيام):\nالرابط: '+url+'\nاليوزر: '+r.uname+'\nالباسورد: '+pass+'\n(اضغط "الدخول كضيف" أو اكتب اليوزر والباسورد في شاشة الدخول)';
-    window._gnewTxt=txt;
-    const wa='';
-    const f=document.getElementById('gnew-form'),res=document.getElementById('gnew-res');if(f)f.style.display='none';
-    if(res){res.style.display='block';res.innerHTML=
-      '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 12px;line-height:2;font-size:14px">'+
-      '✅ تم إنشاء الحساب لمدة <b>'+days+'</b> أيام<br>اليوزر: <b style="font-family:monospace;color:#0d47a1;font-size:17px">'+gEsc(r.uname)+'</b><br>الباسورد: <b style="font-family:monospace;color:#6a1b9a;font-size:17px">'+gEsc(pass)+'</b></div>'+
-      '<textarea id="gnew-txt" readonly style="width:100%;height:120px;margin-top:10px;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-family:inherit;font-size:12px;direction:rtl">'+gEsc(txt)+'</textarea>'+
-      '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn bbl" onclick="adminGuestCopy()">📋 نسخ الرسالة</button>'+
-      (wa?'<a class="btn bxs" style="text-decoration:none;background:#25d366;color:#fff;padding:8px 12px" target="_blank" rel="noopener" href="https://wa.me/'+wa+'?text='+encodeURIComponent(txt)+'">💬 إرسال واتساب</a>':'')+
-      '<button class="btn bre" onclick="document.getElementById(\'gnew-ov\').remove()">إغلاق</button></div>';}
-    toast('✅ تم إنشاء الحساب التجريبي '+r.uname,'ok');
-  }).catch(e=>{if(btn)btn.disabled=false;toast('فشل الإنشاء: '+((e&&e.message)||''),'er');});
+  // توليد فوري بدون انتظار الشبكة (مع تفادي أي يوزر موجود في القائمة المحمّلة)
+  let rec=_guestMake();for(let i=0;i<20&&ADMIN_GUESTS.some(g=>g.username===rec.username);i++)rec=_guestMake();
+  rec.expiresAt=new Date(Date.parse(rec.createdAt)+days*86400000).toISOString();rec.deviceId='';rec.ip='';rec.ua='';rec.createdBy='admin';
+  const url=(location.protocol.indexOf('http')===0&&/vercel\.app$/.test(location.hostname))?location.origin+'/':'https://laborcost.vercel.app/';
+  const txt='أهلاً 👋\nدي بيانات دخول النسخة التجريبية ('+days+' أيام):\nالرابط: '+url+'\nاليوزر: '+rec.username+'\nالباسورد: '+rec.pw+'\n(اكتب اليوزر والباسورد في شاشة الدخول)';
+  window._gnewTxt=txt;
+  const f=document.getElementById('gnew-form'),res=document.getElementById('gnew-res');if(f)f.style.display='none';
+  if(res){res.style.display='block';res.innerHTML=
+    '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 12px;line-height:2;font-size:14px">'+
+    '✅ حساب لمدة <b>'+days+'</b> أيام<br>اليوزر: <b style="font-family:monospace;color:#0d47a1;font-size:17px">'+gEsc(rec.username)+'</b><br>الباسورد: <b style="font-family:monospace;color:#6a1b9a;font-size:17px">'+gEsc(rec.pw)+'</b>'+
+    '<div id="gnew-st" style="font-size:12px;font-weight:800;color:#e65100;margin-top:4px">⏳ جارٍ الحفظ في قاعدة البيانات...</div></div>'+
+    '<textarea id="gnew-txt" readonly style="width:100%;height:110px;margin-top:10px;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-family:inherit;font-size:12px;direction:rtl">'+gEsc(txt)+'</textarea>'+
+    '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn bbl" onclick="adminGuestCopy()">📋 نسخ الرسالة</button>'+
+    '<button class="btn bre" onclick="document.getElementById(\'gnew-ov\').remove()">إغلاق</button></div>';}
+  const setSt=(ok,m)=>{const e=document.getElementById('gnew-st');if(!e)return;e.style.color=ok?'#2e7d32':'#c62828';e.textContent=m;};
+  const to=setTimeout(()=>setSt(false,'⚠️ الحفظ بطيء... لو لم يظهر الحساب في القائمة خلال لحظات فالقاعدة ترفض الكتابة'),6000);
+  cloudDb.collection(GUEST_REG).doc(rec.username).set(rec).then(()=>{clearTimeout(to);setSt(true,'✅ تم الحفظ — الحساب جاهز للاستخدام');toast('✅ تم إنشاء الحساب التجريبي '+rec.username,'ok');},
+    e=>{clearTimeout(to);setSt(false,'❌ فشل الحفظ في قاعدة البيانات ('+((e&&(e.code||e.message))||'')+') — الحساب لن يعمل، راجع صلاحيات Firestore');});
 }
 function adminGuestCopy(){
   const t=window._gnewTxt||'';
