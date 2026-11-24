@@ -706,11 +706,9 @@ body.guest-mode #tb-dz,body.guest-mode #btn-html-bak,body.guest-mode #btn-beb-ba
     <button type="button" class="lg-guest-btn" id="lg-guest-btn" onclick="showGuestCreds()">👤 التسجيل كضيف (تجربة مجانية 7 أيام)</button>
     <div id="lg-guest-card" class="lg-guest-card" style="display:none">
       <div id="gc-form">
-        <div class="gc-t">🎭 تسجيل ضيف — نسخة تجريبية 7 أيام</div>
-        <input id="gc-name" class="gc-in" type="text" maxlength="40" placeholder="الاسم" autocomplete="off">
-        <input id="gc-phone" class="gc-in" type="tel" inputmode="tel" maxlength="16" placeholder="رقم الموبايل" autocomplete="off" style="direction:ltr;text-align:right">
-        <div class="gc-note">سنعطيك اسم مستخدم وكلمة مرور للتجربة. البيانات المعروضة وهمية بالكامل.</div>
-        <button type="button" class="lg-guest-go" id="gc-reg-btn" onclick="guestRegister()">✅ تسجيل والحصول على بيانات الدخول</button>
+        <div class="gc-t">🎭 تجربة مجانية 7 أيام</div>
+        <div class="gc-note">اضغط الزر وسنعطيك اسم مستخدم وكلمة مرور تلقائيين للدخول. البيانات المعروضة وهمية بالكامل.</div>
+        <button type="button" class="lg-guest-go" id="gc-reg-btn" onclick="guestRegister()">🎁 الحصول على يوزر وباسورد للتجربة</button>
         <div id="gc-msg" class="gc-msg"></div>
       </div>
       <div id="gc-done" style="display:none">
@@ -6907,40 +6905,33 @@ function showGuestCreds(){
 function guestRegister(){
   const msg=document.getElementById('gc-msg'),btn=document.getElementById('gc-reg-btn');
   const say=t=>{if(msg)msg.textContent=t||'';};
-  const name=(document.getElementById('gc-name')?.value||'').replace(/[<>&"'`]/g,'').trim().slice(0,40);
-  const phone=(document.getElementById('gc-phone')?.value||'').replace(/[^\d+]/g,'').slice(0,16);
-  if(name.length<2){say('اكتب اسمك');return;}
-  if(!/^\+?\d{10,15}$/.test(phone)){say('اكتب رقم موبايل صحيح');return;}
   if(btn)btn.disabled=true;say('⏳ جارٍ إنشاء حسابك...');
   const finish=(u,p,rec)=>{
     if(btn)btn.disabled=false;say('');
-    try{localStorage.setItem('be_guest',JSON.stringify({u,p,name}));}catch(e){}
+    try{localStorage.setItem('be_guest',JSON.stringify({u,p}));}catch(e){}
     _gcFillCreds({u,p},rec);
   };
   // احتياطي: لو السيرفر لم يستطع الوصول لقاعدة البيانات، نُنشئ الحساب من المتصفح مباشرة
   const viaClient=()=>{
     if(!FSDB){if(btn)btn.disabled=false;say('❌ تعذّر إنشاء الحساب — حاول بعد قليل');return;}
     const reg=FSDB.collection(GUEST_REG);
-    reg.where('phone','==',phone).limit(1).get().then(snap=>{
-      if(!snap.empty){if(btn)btn.disabled=false;say('❌ هذا الرقم مسجّل كضيف من قبل — تواصل مع الإدارة: '+GUEST_CONTACT);return;}
-      const al='abcdefghjkmnpqrstuvwxyz23456789',rb=new Uint32Array(6);window.crypto.getRandomValues(rb);
-      let pass='';for(let i=0;i<6;i++)pass+=al[rb[i]%al.length];
-      const salt=Array.from(window.crypto.getRandomValues(new Uint8Array(8))).map(x=>('0'+x.toString(16)).slice(-2)).join('');
-      const mk=(n)=>{
-        const uname='guest'+String(1000+window.crypto.getRandomValues(new Uint32Array(1))[0]%9000);
-        return reg.doc(uname).get().then(d=>{
-          if(d.exists){if(n>6)throw new Error('x');return mk(n+1);}
-          const now=new Date();
-          const rec={username:uname,name,phone,pw:pass,passHash:'s1$'+salt+'$'+_sha256hex(salt+':'+pass),createdAt:now.toISOString(),
-            expiresAt:new Date(now.getTime()+GUEST_TRIAL_DAYS*86400000).toISOString(),status:'active',lastLogin:'',loginCount:0,extendedCount:0,
-            lastNotifyAt:0,deviceId:DEVICE_ID,ip:MY_IP||'',lastIp:'',ua:navigator.userAgent||''};
-          return reg.doc(uname).set(rec).then(()=>{const{passHash,pw,...pub}=rec;finish(uname,pass,pub);});
-        });
-      };
-      return mk(0);
-    }).catch(()=>{if(btn)btn.disabled=false;say('❌ تعذّر إنشاء الحساب — تأكد من الاتصال وحاول مرة أخرى');});
+    const al='abcdefghjkmnpqrstuvwxyz23456789',rb=new Uint32Array(6);window.crypto.getRandomValues(rb);
+    let pass='';for(let i=0;i<6;i++)pass+=al[rb[i]%al.length];
+    const salt=Array.from(window.crypto.getRandomValues(new Uint8Array(8))).map(x=>('0'+x.toString(16)).slice(-2)).join('');
+    const mk=(n)=>{
+      const uname='guest'+String(1000+window.crypto.getRandomValues(new Uint32Array(1))[0]%9000);
+      return reg.doc(uname).get().then(d=>{
+        if(d.exists){if(n>6)throw new Error('x');return mk(n+1);}
+        const now=new Date();
+        const rec={username:uname,name:'ضيف '+uname,phone:'',pw:pass,passHash:'s1$'+salt+'$'+_sha256hex(salt+':'+pass),createdAt:now.toISOString(),
+          expiresAt:new Date(now.getTime()+GUEST_TRIAL_DAYS*86400000).toISOString(),status:'active',lastLogin:'',loginCount:0,extendedCount:0,
+          lastNotifyAt:0,deviceId:DEVICE_ID,ip:MY_IP||'',lastIp:'',ua:navigator.userAgent||''};
+        return reg.doc(uname).set(rec).then(()=>{const{passHash,pw,...pub}=rec;finish(uname,pass,pub);});
+      });
+    };
+    mk(0).catch(()=>{if(btn)btn.disabled=false;say('❌ تعذّر إنشاء الحساب — تأكد من الاتصال وحاول مرة أخرى');});
   };
-  guestApi('guest-register',{name,phone}).then(j=>{
+  guestApi('guest-register',{}).then(j=>{
     if(j.ok){finish(j.username,j.password,j.record);return;}
     if(j._status>=500){viaClient();return;}
     if(btn)btn.disabled=false;say('❌ '+(j.error||'تعذّر التسجيل — حاول مرة أخرى'));
@@ -7263,8 +7254,6 @@ function adminGuestCreate(){
   ov.innerHTML='<div style="background:#fff;border-radius:14px;max-width:440px;width:100%;padding:16px 18px">'+
     '<div style="font-weight:900;font-size:15px;margin-bottom:10px">➕ إنشاء حساب تجريبي</div>'+
     '<div id="gnew-form">'+
-      '<label style="font-size:12px;font-weight:800">اسم الشخص (اختياري)</label><input id="gnew-name" class="gc-in" style="background:#f8fafc;color:#111;border:1px solid #cbd5e1" maxlength="40" placeholder="مثال: أ/ أحمد">'+
-      '<label style="font-size:12px;font-weight:800">موبايله (اختياري)</label><input id="gnew-phone" class="gc-in" style="background:#f8fafc;color:#111;border:1px solid #cbd5e1;direction:ltr;text-align:right" maxlength="16" placeholder="01xxxxxxxxx">'+
       '<label style="font-size:12px;font-weight:800">مدة التجربة (أيام)</label><input id="gnew-days" class="gc-in" style="background:#f8fafc;color:#111;border:1px solid #cbd5e1" type="number" min="1" max="365" value="'+GUEST_TRIAL_DAYS+'">'+
       '<div style="display:flex;gap:8px;margin-top:10px"><button class="btn bgr" id="gnew-go" onclick="adminGuestCreateGo()">✅ إنشاء</button><button class="btn bre" onclick="document.getElementById(\'gnew-ov\').remove()">إلغاء</button></div>'+
     '</div><div id="gnew-res" style="display:none"></div></div>';
@@ -7273,8 +7262,6 @@ function adminGuestCreate(){
 }
 function adminGuestCreateGo(){
   if(!can('guestsadm')||!cloudReady||!cloudDb)return;
-  const name=(document.getElementById('gnew-name')?.value||'').replace(/[<>&"'`]/g,'').trim().slice(0,40)||'ضيف تجريبي';
-  const phone=(document.getElementById('gnew-phone')?.value||'').replace(/[^\d+]/g,'').slice(0,16);
   let days=parseInt(document.getElementById('gnew-days')?.value,10);if(!(days>=1&&days<=365))days=GUEST_TRIAL_DAYS;
   const btn=document.getElementById('gnew-go');if(btn)btn.disabled=true;
   const reg=cloudDb.collection(GUEST_REG);
@@ -7286,7 +7273,7 @@ function adminGuestCreateGo(){
     return reg.doc(uname).get().then(d=>{
       if(d.exists){if(n>8)throw new Error('تعذّر توليد يوزر جديد');return mk(n+1);}
       const now=new Date();
-      const rec={username:uname,name,phone,pw:pass,passHash:'s1$'+salt+'$'+_sha256hex(salt+':'+pass),createdAt:now.toISOString(),
+      const name='ضيف '+uname,phone='';const rec={username:uname,name,phone,pw:pass,passHash:'s1$'+salt+'$'+_sha256hex(salt+':'+pass),createdAt:now.toISOString(),
         expiresAt:new Date(now.getTime()+days*86400000).toISOString(),status:'active',lastLogin:'',loginCount:0,extendedCount:0,
         lastNotifyAt:0,deviceId:'',ip:'',lastIp:'',ua:'',createdBy:'admin'};
       return reg.doc(uname).set(rec).then(()=>({uname,rec}));
@@ -7294,9 +7281,9 @@ function adminGuestCreateGo(){
   };
   mk(0).then(r=>{
     const url=(location.protocol.indexOf('http')===0&&/vercel\.app$/.test(location.hostname))?location.origin+'/':'https://laborcost.vercel.app/';
-    const txt='أهلاً '+name+' 👋\nدي بيانات دخول النسخة التجريبية ('+days+' أيام):\nالرابط: '+url+'\nاليوزر: '+r.uname+'\nالباسورد: '+pass+'\n(اضغط "الدخول كضيف" أو اكتب اليوزر والباسورد في شاشة الدخول)';
+    const txt='أهلاً 👋\nدي بيانات دخول النسخة التجريبية ('+days+' أيام):\nالرابط: '+url+'\nاليوزر: '+r.uname+'\nالباسورد: '+pass+'\n(اضغط "الدخول كضيف" أو اكتب اليوزر والباسورد في شاشة الدخول)';
     window._gnewTxt=txt;
-    let wa=String(phone||'').replace(/\D/g,'');if(wa.startsWith('0'))wa='2'+wa;
+    const wa='';
     const f=document.getElementById('gnew-form'),res=document.getElementById('gnew-res');if(f)f.style.display='none';
     if(res){res.style.display='block';res.innerHTML=
       '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 12px;line-height:2;font-size:14px">'+
