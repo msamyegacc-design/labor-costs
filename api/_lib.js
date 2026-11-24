@@ -6,34 +6,12 @@ const PROJECT = process.env.FS_PROJECT || 'elkhawaga-60a80';
 const API_KEY = process.env.FS_API_KEY || 'AIzaSyAQxNvYseziOCJpp4BHnRyjeFXEFesZBZg'; // مفتاح الويب العام (نفس الموجود بالصفحة)
 const FS_BASE = process.env.FIRESTORE_BASE || 'https://firestore.googleapis.com/v1';
 const GUEST_REG = '__guests_registry__';
+const LOGS = '__guest_logins__';
 const APP_URL = process.env.APP_URL || 'https://laborcost.vercel.app/';
 const TRIAL_DAYS = 7;
-const OTP_TTL_MS = 10 * 60 * 1000;
 
 // نقاط حقن للاختبار
 const _deps = { fetch: (...a) => fetch(...a), sendMail: null, now: () => Date.now() };
-
-function secret() {
-  const s = process.env.OTP_SECRET || process.env.GMAIL_APP_PASSWORD || '';
-  return s ? crypto.createHash('sha256').update('otp:' + s).digest() : null;
-}
-function b64u(buf) { return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
-function unb64u(s) { return Buffer.from(String(s).replace(/-/g, '+').replace(/_/g, '/'), 'base64'); }
-function otpHmac(email, code, exp) {
-  return b64u(crypto.createHmac('sha256', secret()).update(email + '|' + code + '|' + exp).digest());
-}
-function makeToken(email, code) {
-  const exp = _deps.now() + OTP_TTL_MS;
-  return b64u(JSON.stringify({ e: email, x: exp, h: otpHmac(email, code, exp) }));
-}
-function checkToken(token, email, code) {
-  let p; try { p = JSON.parse(unb64u(token).toString('utf8')); } catch (e) { return 'bad'; }
-  if (!p || p.e !== email || !p.x || !p.h) return 'bad';
-  if (_deps.now() > p.x) return 'expired';
-  const a = Buffer.from(p.h), b = Buffer.from(otpHmac(email, String(code), p.x));
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return 'wrong';
-  return 'ok';
-}
 
 // ── تجزئة كلمة المرور (نفس الصيغة في الصفحة: s1$salt$sha256hex(salt:pass)) ──
 function hashPass(pass, salt) {
@@ -171,10 +149,8 @@ function limited(key, max, windowMs) {
 }
 
 const cleanName = s => String(s || '').replace(/[<>&"'`]/g, '').trim().slice(0, 40);
-const cleanEmail = s => String(s || '').trim().toLowerCase().slice(0, 100);
 const cleanPhone = s => String(s || '').replace(/[^\d+]/g, '').slice(0, 16);
-const EMAIL_RE = /^[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']{2,}$/;
 const PHONE_RE = /^\+?\d{10,15}$/;
 
-module.exports = { toFs, fromFs, _deps, secret, makeToken, checkToken, hashPass, checkPass, fsGet, fsFind, fsCreate, fsPatch, sendMail, notifyAdmin,
-  esc, cairo, cors, send, readBody, clientIp, limited, cleanName, cleanEmail, cleanPhone, EMAIL_RE, PHONE_RE, GUEST_REG, APP_URL, TRIAL_DAYS, _hits };
+module.exports = { toFs, fromFs, _deps, hashPass, checkPass, fsGet, fsFind, fsCreate, fsPatch, sendMail, notifyAdmin,
+  esc, cairo, cors, send, readBody, clientIp, limited, cleanName, cleanPhone, PHONE_RE, GUEST_REG, LOGS, APP_URL, TRIAL_DAYS, _hits };

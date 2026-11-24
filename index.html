@@ -708,31 +708,17 @@ body.guest-mode #tb-dz,body.guest-mode #btn-html-bak,body.guest-mode #btn-beb-ba
       <div id="gc-form">
         <div class="gc-t">🎭 تسجيل ضيف — نسخة تجريبية 7 أيام</div>
         <input id="gc-name" class="gc-in" type="text" maxlength="40" placeholder="الاسم" autocomplete="off">
-        <input id="gc-email" class="gc-in" type="email" inputmode="email" maxlength="100" placeholder="البريد الإلكتروني (سنرسل عليه كود التحقق)" autocomplete="off" style="direction:ltr;text-align:right">
         <input id="gc-phone" class="gc-in" type="tel" inputmode="tel" maxlength="16" placeholder="رقم الموبايل" autocomplete="off" style="direction:ltr;text-align:right">
-        <div class="gc-note">سنرسل كود تحقق من 6 أرقام على بريدك، ثم تختار كلمة المرور. البيانات المعروضة وهمية بالكامل.</div>
-        <button type="button" class="lg-guest-go" id="gc-send-btn" onclick="guestSendCode()">📧 إرسال كود التحقق</button>
+        <div class="gc-note">سنعطيك اسم مستخدم وكلمة مرور للتجربة. البيانات المعروضة وهمية بالكامل.</div>
+        <button type="button" class="lg-guest-go" id="gc-reg-btn" onclick="guestRegister()">✅ تسجيل والحصول على بيانات الدخول</button>
         <div id="gc-msg" class="gc-msg"></div>
       </div>
-      <div id="gc-verify" style="display:none">
-        <div class="gc-t">📧 أدخل كود التحقق</div>
-        <div class="gc-note" id="gc-vnote"></div>
-        <input id="gc-code" class="gc-in" type="text" inputmode="numeric" maxlength="6" placeholder="------" autocomplete="one-time-code" style="direction:ltr;text-align:center;letter-spacing:10px;font-size:22px;font-weight:900">
-        <input id="gc-pass1" class="gc-in" type="password" maxlength="64" placeholder="اختر كلمة مرور (6 أحرف على الأقل)" autocomplete="new-password">
-        <input id="gc-pass2" class="gc-in" type="password" maxlength="64" placeholder="أعد كتابة كلمة المرور" autocomplete="new-password">
-        <button type="button" class="lg-guest-go" id="gc-ver-btn" onclick="guestVerify()">✅ تحقق وسجّل</button>
-        <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11.5px">
-          <button type="button" id="gc-resend" onclick="guestSendCode(true)" style="background:none;border:none;color:#ffd54f;cursor:pointer;font-family:inherit;font-weight:800" disabled>إعادة إرسال الكود</button>
-          <button type="button" onclick="_gcStep(1)" style="background:none;border:none;color:#b0bec5;cursor:pointer;font-family:inherit;font-weight:700">← تغيير البيانات</button>
-        </div>
-        <div id="gc-msg2" class="gc-msg"></div>
-      </div>
       <div id="gc-done" style="display:none">
-        <div class="gc-t">✅ حساب الضيف جاهز</div>
+        <div class="gc-t">✅ بيانات دخول الضيف</div>
         <div class="gc-row"><span>اسم المستخدم</span><b id="gu-user"></b></div>
-        <div class="gc-note" id="gc-passnote">كلمة المرور هي التي اخترتها. يمكنك أيضاً الدخول بالبريد الإلكتروني.</div>
+        <div class="gc-row"><span>كلمة المرور</span><b id="gu-pass"></b></div>
         <div class="gc-note" id="gc-exp"></div>
-        <button type="button" class="lg-guest-go" onclick="guestLogin()">▶ دخول</button>
+        <button type="button" class="lg-guest-go" onclick="guestLogin()">▶ دخول بهذه البيانات</button>
       </div>
     </div>
     <button type="button" class="lg-back-btn" onclick="gotoConnectView()">← رجوع إلى الربط السحابي بالشركة</button>
@@ -1666,7 +1652,7 @@ function doLogin(){
   const uNorm=user.toLowerCase().replace(/\s+/g,' ');
   const u=ST.users.find(x=>String(x.username||'').trim().toLowerCase().replace(/\s+/g,' ')===uNorm&&x.password===hpw(pass)&&x.active!==false);
   // حساب ضيف (تجربة 7 أيام): يُتحقق منه من السجل السحابي فقط، ولا يوجد في جدول المستخدمين الحقيقي
-  if(!u&&(/^guest\d{3,}$/.test(uNorm)||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(uNorm))){guestAuthAndStart(uNorm,pass);return;}
+  if(!u&&/^guest\d{3,}$/.test(uNorm)){guestAuthAndStart(uNorm,pass);return;}
   if(!u){if(err){err.style.display='block';err.textContent='اسم المستخدم أو كلمة المرور غير صحيحة';}return;}
   // الموسم المختار من شاشة الدخول
   const seasonSel=document.getElementById('lg-season');
@@ -6888,100 +6874,61 @@ function guestApi(path,body){
 }
 function guestNotify(u){try{guestApi('guest-notify',{username:u}).catch(()=>{});}catch(e){}}
 
-// ── شاشة التسجيل: 1 بيانات → 2 كود التحقق → تم ──
-let _gcPending=null,_gcResendT=null;
+// ── شاشة التسجيل: بيانات → يوزر وباسورد تلقائي ──
 function _gcStep(n){
-  const ids=['gc-form','gc-verify','gc-done'];
-  ids.forEach((id,i)=>{const el=document.getElementById(id);if(el)el.style.display=(i===n-1)?'block':'none';});
+  ['gc-form','gc-done'].forEach((id,i)=>{const el=document.getElementById(id);if(el)el.style.display=(i===n-1)?'block':'none';});
 }
-function _gcShow(done){_gcStep(done?3:1);}
+function _gcShow(done){_gcStep(done?2:1);}
 function _gcFillCreds(c,rec){
   _gcCred=c;
-  const u=document.getElementById('gu-user'),e=document.getElementById('gc-exp'),pn=document.getElementById('gc-passnote');
-  if(u)u.textContent=c.u;
-  if(pn)pn.textContent=c.p?'تم تسجيلك بنجاح. اضغط دخول للبدء — ويمكنك لاحقاً الدخول بالبريد أو اسم المستخدم مع كلمة المرور التي اخترتها.':'ادخل بكلمة المرور التي اخترتها (أو بالبريد الإلكتروني الذي سجّلت به).';
+  const u=document.getElementById('gu-user'),p=document.getElementById('gu-pass'),e=document.getElementById('gc-exp');
+  if(u)u.textContent=c.u;if(p)p.textContent=c.p||'••••••';
   if(e){
     if(rec){const st=guestStatus(rec);
       e.textContent=st==='active'?'⏳ متبقي '+guestDaysLeft(rec)+' يوم من التجربة — بيانات تجريبية فقط، لا يُحفظ أي تعديل، ولا تظهر بيانات الشركة.':guestBlockMsg(st);
-    }else e.textContent='⏳ تجربة مجانية '+GUEST_TRIAL_DAYS+' أيام — بيانات تجريبية فقط، لا يُحفظ أي تعديل، ولا تظهر بيانات الشركة.';
+    }else e.textContent='⏳ تجربة مجانية '+GUEST_TRIAL_DAYS+' أيام — بيانات تجريبية فقط، لا يُحفظ أي تعديل، ولا تظهر بيانات الشركة. احتفظ بهذه البيانات.';
   }
-  _gcStep(3);
+  _gcStep(2);
 }
 function showGuestCreds(){
   const c=document.getElementById('lg-guest-card'),b=document.getElementById('lg-guest-btn');
   if(c)c.style.display='block';if(b)b.style.display='none';
   let saved=null;try{saved=JSON.parse(localStorage.getItem('be_guest')||'null');}catch(e){}
-  if(saved&&saved.u){
-    _gcFillCreds({u:saved.u},null);
-    if(FSDB){FSDB.collection(GUEST_REG).doc(saved.u).get().then(d=>{if(d.exists)_gcFillCreds({u:saved.u},d.data());}).catch(()=>{});}
+  if(saved&&saved.u&&saved.p){
+    _gcFillCreds(saved,null);
+    if(FSDB){FSDB.collection(GUEST_REG).doc(saved.u).get().then(d=>{if(d.exists)_gcFillCreds(saved,d.data());}).catch(()=>{});}
   }else _gcStep(1);
 }
-function _gcCooldown(sec){
-  const b=document.getElementById('gc-resend');if(!b)return;
-  clearInterval(_gcResendT);let n=sec;b.disabled=true;b.textContent='إعادة الإرسال بعد '+n+' ث';
-  _gcResendT=setInterval(()=>{n--;if(n<=0){clearInterval(_gcResendT);b.disabled=false;b.textContent='إعادة إرسال الكود';}else b.textContent='إعادة الإرسال بعد '+n+' ث';},1000);
-}
-function guestSendCode(resend){
-  const msg=document.getElementById(resend?'gc-msg2':'gc-msg'),btn=document.getElementById('gc-send-btn');
+function guestRegister(){
+  const msg=document.getElementById('gc-msg'),btn=document.getElementById('gc-reg-btn');
   const say=t=>{if(msg)msg.textContent=t||'';};
-  let name,email,phone;
-  if(resend&&_gcPending){({name,email,phone}=_gcPending);}
-  else{
-    name=(document.getElementById('gc-name')?.value||'').replace(/[<>&"'`]/g,'').trim().slice(0,40);
-    email=(document.getElementById('gc-email')?.value||'').trim().toLowerCase().slice(0,100);
-    phone=(document.getElementById('gc-phone')?.value||'').replace(/[^\d+]/g,'').slice(0,16);
-  }
+  const name=(document.getElementById('gc-name')?.value||'').replace(/[<>&"'`]/g,'').trim().slice(0,40);
+  const phone=(document.getElementById('gc-phone')?.value||'').replace(/[^\d+]/g,'').slice(0,16);
   if(name.length<2){say('اكتب اسمك');return;}
-  if(!/^[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']{2,}$/.test(email)){say('اكتب بريد إلكتروني صحيح');return;}
   if(!/^\+?\d{10,15}$/.test(phone)){say('اكتب رقم موبايل صحيح');return;}
-  if(btn)btn.disabled=true;say('⏳ جارٍ إرسال الكود إلى بريدك...');
-  guestApi('otp-send',{name,email,phone}).then(j=>{
+  if(btn)btn.disabled=true;say('⏳ جارٍ إنشاء حسابك...');
+  guestApi('guest-register',{name,phone}).then(j=>{
     if(btn)btn.disabled=false;
-    if(!j.ok){say('❌ '+(j.error||'تعذّر إرسال الكود — حاول مرة أخرى'));return;}
-    _gcPending={name,email,phone,token:j.token};say('');
-    const vn=document.getElementById('gc-vnote');if(vn)vn.textContent='أرسلنا كوداً من 6 أرقام إلى '+email+' (صالح 10 دقائق). راجع صندوق الوارد أو الرسائل غير المرغوبة.';
-    _gcStep(2);_gcCooldown(45);
-    const ci=document.getElementById('gc-code');if(ci){ci.value='';try{ci.focus();}catch(e){}}
-  }).catch(()=>{if(btn)btn.disabled=false;say('❌ تعذّر الاتصال بالسيرفر — تأكد من الإنترنت وحاول مرة أخرى');});
-}
-function guestVerify(){
-  const msg=document.getElementById('gc-msg2'),btn=document.getElementById('gc-ver-btn');
-  const say=t=>{if(msg)msg.textContent=t||'';};
-  if(!_gcPending){_gcStep(1);return;}
-  const code=(document.getElementById('gc-code')?.value||'').replace(/\D/g,'');
-  const p1=document.getElementById('gc-pass1')?.value||'',p2=document.getElementById('gc-pass2')?.value||'';
-  if(code.length!==6){say('اكتب الكود المكوّن من 6 أرقام');return;}
-  if(p1.length<6){say('كلمة المرور 6 أحرف على الأقل');return;}
-  if(p1!==p2){say('كلمتا المرور غير متطابقتين');return;}
-  if(btn)btn.disabled=true;say('⏳ جارٍ التحقق وإنشاء حسابك...');
-  guestApi('otp-verify',{token:_gcPending.token,code,name:_gcPending.name,email:_gcPending.email,phone:_gcPending.phone,password:p1}).then(j=>{
-    if(btn)btn.disabled=false;
-    if(!j.ok){say('❌ '+(j.error||'تعذّر إتمام التسجيل'));return;}
+    if(!j.ok){say('❌ '+(j.error||'تعذّر التسجيل — حاول مرة أخرى'));return;}
     say('');
-    try{localStorage.setItem('be_guest',JSON.stringify({u:j.username,name:_gcPending.name}));}catch(e){}
-    _gcCred={u:j.username,p:p1};_gcFillCreds(_gcCred,j.record);
-    ['gc-code','gc-pass1','gc-pass2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-    _gcPending=null;clearInterval(_gcResendT);
-  }).catch(()=>{if(btn)btn.disabled=false;say('❌ تعذّر الاتصال بالسيرفر — حاول مرة أخرى');});
+    try{localStorage.setItem('be_guest',JSON.stringify({u:j.username,p:j.password,name}));}catch(e){}
+    _gcFillCreds({u:j.username,p:j.password},j.record);
+  }).catch(()=>{if(btn)btn.disabled=false;say('❌ تعذّر الاتصال بالسيرفر — تأكد من الإنترنت وحاول مرة أخرى');});
 }
 function guestLogin(){
   if(!_gcCred)return;
   const u=document.getElementById('luser'),p=document.getElementById('lpass');
-  if(u)u.value=_gcCred.u;
-  if(_gcCred.p){if(p)p.value=_gcCred.p;doLogin();}
-  else if(p){p.value='';try{p.focus();}catch(e){}}
+  if(u)u.value=_gcCred.u;if(p)p.value=_gcCred.p||'';
+  doLogin();
 }
 function guestAuthAndStart(id,pass){
   const err=document.getElementById('lerr');
   const say=(t,info)=>{if(err){err.style.display='block';err.style.color=info?'#ffd54f':'#ff5252';err.textContent=t;}};
   const BAD='اسم المستخدم أو كلمة المرور غير صحيحة';
   say('⏳ جارٍ التحقق من حساب الضيف...',true);
-  const isUser=/^guest\d{3,}$/.test(id);
   const find=()=>{
     if(!FSDB)return Promise.reject(new Error('nofs'));
-    const reg=FSDB.collection(GUEST_REG);
-    return isUser?reg.doc(id).get().then(d=>d.exists?d.data():null)
-                 :reg.where('email','==',id).limit(1).get().then(s=>s.empty?null:s.docs[0].data());
+    return FSDB.collection(GUEST_REG).doc(id).get().then(d=>d.exists?d.data():null);
   };
   const proceed=(g)=>{
     const st=guestStatus(g);
@@ -7006,7 +6953,7 @@ function guestAuthAndStart(id,pass){
 
 // ── سجل نشاط الضيف (يظهر للمدير) ──
 let GACT=null,GACT_T=null;
-const GACT_COL='__guest_activity__';
+const GACT_COL='__guest_activity__',GUEST_LOGS='__guest_logins__';
 function _gCounts(){return{tickets:(ST.tickets||[]).length,contractors:(ST.contractors||[]).length,sites:(ST.sites||[]).length,sectors:(ST.sectors||[]).length,workTypes:(ST.workTypes||[]).length};}
 function guestAct(k,d){
   if(!GACT)return;
@@ -7201,7 +7148,8 @@ function renderAdminGuests(){
       '<td style="color:var(--muted)">'+(i+1)+'</td>'+
       '<td style="font-weight:800">'+gEsc(g.name)+'</td>'+
       '<td style="direction:ltr;text-align:right;font-family:monospace">'+gEsc(g.phone)+'</td>'+
-      '<td style="direction:ltr;text-align:right;font-size:11px">'+gEsc(g.email||'—')+(g.emailVerified?' ✔':'')+'</td>'+
+      '<td style="font-family:monospace;font-weight:800;color:#6a1b9a">'+gEsc(g.pw||'—')+'</td>'+
+      '<td style="direction:ltr;text-align:right;font-size:11px;font-family:monospace">'+gEsc(g.lastIp||g.ip||'—')+'</td>'+
       '<td style="font-family:monospace;color:#0d47a1;font-weight:800">'+u+'</td>'+
       '<td style="font-size:10.5px">'+fmt(g.createdAt)+'</td>'+
       '<td style="font-size:10.5px">'+fmt(g.expiresAt)+'</td>'+
@@ -7217,41 +7165,62 @@ function renderAdminGuests(){
           ?'<button class="btn bgr bxs" onclick="adminGuestToggle(\''+u+'\')">▶ تفعيل</button> '
           :'<button class="btn bre bxs" onclick="adminGuestToggle(\''+u+'\')">⛔ قطع</button> ')+
         (wa?'<a class="btn bxs" style="text-decoration:none;background:#25d366;color:#fff" target="_blank" rel="noopener" href="https://wa.me/'+wa+'">💬</a> ':'')+
-        '<button class="btn bbl bxs" onclick="adminGuestActivity(\''+u+'\')">📋 النشاط</button> '+
+        '<button class="btn bbl bxs" onclick="adminGuestActivity(\''+u+'\')">📋 الدخول والنشاط</button> '+
         '<button class="btn bre bxs" onclick="adminGuestDelete(\''+u+'\')">🗑️</button>'+
       '</td></tr>';
   }).join('');
   w.innerHTML='<div class="sc"><div class="sh"><h2>👥 كل الضيوف المسجّلين</h2></div><div class="sb">'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'+card(list.length,'إجمالي الضيوف','#0d47a1')+card(cnt.active,'نشط','#2e7d32')+card(cnt.expired,'منتهي','#e65100')+card(cnt.suspended,'موقوف','#c62828')+'</div>'+
-    (list.length?'<div style="overflow-x:auto"><table class="dt" style="min-width:1150px"><thead><tr><th>#</th><th>الاسم</th><th>الموبايل</th><th>الإيميل</th><th>اسم المستخدم</th><th>تاريخ التسجيل</th><th>ينتهي في</th><th>المتبقي</th><th>الحالة</th><th>آخر دخول</th><th>مرات الدخول</th><th class="nc">إجراءات</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    (list.length?'<div style="overflow-x:auto"><table class="dt" style="min-width:1150px"><thead><tr><th>#</th><th>الاسم</th><th>الموبايل</th><th>كلمة المرور</th><th>آخر IP</th><th>اسم المستخدم</th><th>تاريخ التسجيل</th><th>ينتهي في</th><th>المتبقي</th><th>الحالة</th><th>آخر دخول</th><th>مرات الدخول</th><th class="nc">إجراءات</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
       :'<div style="padding:18px;text-align:center;color:var(--muted)">لا يوجد ضيوف مسجّلون بعد.</div>')+
     '<div class="info" style="margin-top:13px">ℹ️ التمديد يُضاف على تاريخ الانتهاء الحالي (أو من الآن لو انتهى). "قطع" يوقف الضيف فوراً ويُخرجه من جلسته الحالية، و"تفعيل" يعيده.</div>'+
   '</div></div>';
+}
+function guestUaShort(ua){
+  ua=String(ua||'');if(!ua)return'—';
+  const br=/Edg\//.test(ua)?'Edge':/OPR\//.test(ua)?'Opera':/Firefox\//.test(ua)?'Firefox':/Chrome\//.test(ua)?'Chrome':/Safari\//.test(ua)?'Safari':'متصفح';
+  const os=/Android/.test(ua)?'Android':/iPhone/.test(ua)?'iPhone':/iPad/.test(ua)?'iPad':/Windows/.test(ua)?'Windows':/Mac OS/.test(ua)?'Mac':/Linux/.test(ua)?'Linux':'';
+  return br+(os?' / '+os:'');
 }
 function adminGuestActivity(u){
   if(!can('guestsadm')){toast('للمدير الأساسي فقط','er');return;}
   if(!/^guest\d{3,}$/.test(String(u))||!FSDB){toast('لا يوجد اتصال سحابي','er');return;}
   const old=document.getElementById('gact-ov');if(old)old.remove();
+  const g=ADMIN_GUESTS.find(x=>x.username===u)||{};
   const ov=document.createElement('div');ov.id='gact-ov';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:14px;direction:rtl';
-  ov.innerHTML='<div style="background:#fff;border-radius:14px;max-width:760px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">'+
-    '<div style="padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center"><b>📋 نشاط الضيف '+gEsc(u)+'</b><button class="btn bre bxs" onclick="document.getElementById(\'gact-ov\').remove()">✖ إغلاق</button></div>'+
+  ov.innerHTML='<div style="background:#fff;border-radius:14px;max-width:820px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">'+
+    '<div style="padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center"><b>📋 الدخول والنشاط — '+gEsc(g.name||u)+'</b><button class="btn bre bxs" onclick="document.getElementById(\'gact-ov\').remove()">✖ إغلاق</button></div>'+
     '<div id="gact-body" style="padding:14px 16px;overflow:auto;font-size:12.5px">⏳ جارٍ التحميل...</div></div>';
   ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
   document.body.appendChild(ov);
-  FSDB.collection(GACT_COL).where('username','==',u).get().then(snap=>{
+  const fd=iso=>{const d=new Date(iso);return isNaN(d)?'—':d.toLocaleDateString('ar-EG',{month:'short',day:'numeric'})+' '+d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit'});};
+  Promise.all([
+    FSDB.collection(GUEST_LOGS).where('username','==',u).get(),
+    FSDB.collection(GACT_COL).where('username','==',u).get()
+  ]).then(([ls,as])=>{
     const body=document.getElementById('gact-body');if(!body)return;
-    const sess=snap.docs.map(d=>d.data()).sort((a,b)=>String(b.start||'').localeCompare(String(a.start||'')));
-    if(!sess.length){body.innerHTML='<div style="text-align:center;color:#64748b;padding:18px">لا يوجد نشاط مسجّل لهذا الضيف بعد.</div>';return;}
-    const fd=iso=>{const d=new Date(iso);return isNaN(d)?'—':d.toLocaleDateString('ar-EG',{month:'short',day:'numeric'})+' '+d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit'});};
+    const logins=ls.docs.map(d=>d.data()).sort((a,b)=>String(b.at||'').localeCompare(String(a.at||'')));
+    const ips={};logins.forEach(l=>{if(l.ip)ips[l.ip]=(ips[l.ip]||0)+1;});
+    const sess=as.docs.map(d=>d.data()).sort((a,b)=>String(b.start||'').localeCompare(String(a.start||'')));
     const ic={login:'🔑',logout:'🚪',page:'📄',msg:'💬',err:'⚠️',data:'✏️'};
-    body.innerHTML=sess.map((x,i)=>{
+    let h='<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-bottom:12px;line-height:2">'+
+      '👤 <b>'+gEsc(g.name||'—')+'</b> — 📱 <span style="direction:ltr;display:inline-block">'+gEsc(g.phone||'—')+'</span><br>'+
+      '🔑 اليوزر: <b style="font-family:monospace;color:#0d47a1">'+gEsc(u)+'</b> &nbsp; كلمة المرور: <b style="font-family:monospace;color:#6a1b9a">'+gEsc(g.pw||'—')+'</b><br>'+
+      '🌐 عناوين IP مختلفة: <b>'+Object.keys(ips).length+'</b> — مرات الدخول المسجّلة: <b>'+logins.length+'</b></div>';
+    h+='<div style="font-weight:900;margin:6px 0">🌐 سجل الدخول (IP والجهاز)</div>';
+    h+=logins.length?'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;margin-bottom:14px"><thead><tr style="background:#f1f5f9"><th style="padding:4px 6px">الوقت</th><th>IP</th><th>الجهاز</th><th>اليوزر</th><th>الباسورد</th></tr></thead><tbody>'+
+      logins.map(l=>'<tr style="border-top:1px solid #f1f5f9;text-align:center"><td style="padding:4px 6px;white-space:nowrap">'+fd(l.at)+'</td><td style="direction:ltr;font-family:monospace">'+gEsc(l.ip||'—')+'</td><td title="'+gEsc(l.ua||'')+'">'+gEsc(guestUaShort(l.ua))+'</td><td style="font-family:monospace">'+gEsc(l.username)+'</td><td style="font-family:monospace">'+gEsc(l.pw||g.pw||'—')+'</td></tr>').join('')+'</tbody></table></div>'
+      :'<div style="color:#64748b;margin-bottom:14px">لا يوجد سجل دخول بعد.</div>';
+    h+='<div style="font-weight:900;margin:6px 0">📋 ما فعله على النظام</div>';
+    h+=sess.length?sess.map((x,i)=>{
       const evs=(x.events||[]);
       return '<details'+(i<2?' open':'')+' style="margin-bottom:10px;border:1px solid #e5e7eb;border-radius:10px;padding:8px 12px">'+
         '<summary style="cursor:pointer;font-weight:800">جلسة '+fd(x.start)+' — آخر نشاط '+fd(x.last)+' ('+evs.length+' حدث)</summary>'+
         '<table style="width:100%;margin-top:8px;border-collapse:collapse">'+evs.map(e=>'<tr style="border-top:1px solid #f1f5f9"><td style="white-space:nowrap;color:#64748b;padding:3px 0;width:1%">'+fd(e.t)+'</td><td style="padding:3px 8px">'+(ic[e.k]||'•')+' '+gEsc(e.d)+'</td></tr>').join('')+'</table></details>';
-    }).join('');
-  }).catch(()=>{const body=document.getElementById('gact-body');if(body)body.textContent='تعذّر تحميل النشاط — تأكد من الاتصال.';});
+    }).join(''):'<div style="color:#64748b">لا يوجد نشاط مسجّل بعد.</div>';
+    body.innerHTML=h;
+  }).catch(()=>{const body=document.getElementById('gact-body');if(body)body.textContent='تعذّر تحميل البيانات — تأكد من الاتصال.';});
 }
 function _gAdminRef(u){
   if(!can('guestsadm')){toast('للمدير الأساسي فقط','er');return null;}
