@@ -1,0 +1,10 @@
+{
+  "name": "labor-costs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Labor cost ERP - static page + small serverless API for guest OTP / notifications",
+  "dependencies": {
+    "nodemailer": "^6.9.16"
+  },
+  "engines": { "node": ">=18" }
+}
