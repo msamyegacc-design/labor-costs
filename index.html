@@ -6872,7 +6872,12 @@ function guestApi(path,body){
   return fetch(GUEST_API+'/api/'+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body||{})})
     .then(r=>r.json().catch(()=>({})).then(j=>{j._status=r.status;return j;}));
 }
-function guestNotify(u){try{guestApi('guest-notify',{username:u}).catch(()=>{});}catch(e){}}
+function guestNotify(u){
+  // السيرفر يسجّل الدخول (IP حقيقي) ويُرسل الإشعار؛ لو فشل نسجّل الدخول من المتصفح كاحتياط
+  const fallback=()=>{try{if(!FSDB||!GUEST_REC)return;const at=new Date().toISOString();
+    FSDB.collection(GUEST_LOGS).doc(u+'__'+Date.now()+'_c').set({username:u,name:GUEST_REC.name||'',ip:MY_IP||'',ua:navigator.userAgent||'',at,pw:GUEST_REC.pw||'',clientSide:true}).catch(()=>{});}catch(e){}};
+  try{guestApi('guest-notify',{username:u}).then(j=>{if(!j||!j.logged)fallback();}).catch(fallback);}catch(e){fallback();}
+}
 
 // ── شاشة التسجيل: بيانات → يوزر وباسورد تلقائي ──
 function _gcStep(n){
@@ -6907,13 +6912,39 @@ function guestRegister(){
   if(name.length<2){say('اكتب اسمك');return;}
   if(!/^\+?\d{10,15}$/.test(phone)){say('اكتب رقم موبايل صحيح');return;}
   if(btn)btn.disabled=true;say('⏳ جارٍ إنشاء حسابك...');
+  const finish=(u,p,rec)=>{
+    if(btn)btn.disabled=false;say('');
+    try{localStorage.setItem('be_guest',JSON.stringify({u,p,name}));}catch(e){}
+    _gcFillCreds({u,p},rec);
+  };
+  // احتياطي: لو السيرفر لم يستطع الوصول لقاعدة البيانات، نُنشئ الحساب من المتصفح مباشرة
+  const viaClient=()=>{
+    if(!FSDB){if(btn)btn.disabled=false;say('❌ تعذّر إنشاء الحساب — حاول بعد قليل');return;}
+    const reg=FSDB.collection(GUEST_REG);
+    reg.where('phone','==',phone).limit(1).get().then(snap=>{
+      if(!snap.empty){if(btn)btn.disabled=false;say('❌ هذا الرقم مسجّل كضيف من قبل — تواصل مع الإدارة: '+GUEST_CONTACT);return;}
+      const al='abcdefghjkmnpqrstuvwxyz23456789',rb=new Uint32Array(6);window.crypto.getRandomValues(rb);
+      let pass='';for(let i=0;i<6;i++)pass+=al[rb[i]%al.length];
+      const salt=Array.from(window.crypto.getRandomValues(new Uint8Array(8))).map(x=>('0'+x.toString(16)).slice(-2)).join('');
+      const mk=(n)=>{
+        const uname='guest'+String(1000+window.crypto.getRandomValues(new Uint32Array(1))[0]%9000);
+        return reg.doc(uname).get().then(d=>{
+          if(d.exists){if(n>6)throw new Error('x');return mk(n+1);}
+          const now=new Date();
+          const rec={username:uname,name,phone,pw:pass,passHash:'s1$'+salt+'$'+_sha256hex(salt+':'+pass),createdAt:now.toISOString(),
+            expiresAt:new Date(now.getTime()+GUEST_TRIAL_DAYS*86400000).toISOString(),status:'active',lastLogin:'',loginCount:0,extendedCount:0,
+            lastNotifyAt:0,deviceId:DEVICE_ID,ip:MY_IP||'',lastIp:'',ua:navigator.userAgent||''};
+          return reg.doc(uname).set(rec).then(()=>{const{passHash,pw,...pub}=rec;finish(uname,pass,pub);});
+        });
+      };
+      return mk(0);
+    }).catch(()=>{if(btn)btn.disabled=false;say('❌ تعذّر إنشاء الحساب — تأكد من الاتصال وحاول مرة أخرى');});
+  };
   guestApi('guest-register',{name,phone}).then(j=>{
-    if(btn)btn.disabled=false;
-    if(!j.ok){say('❌ '+(j.error||'تعذّر التسجيل — حاول مرة أخرى'));return;}
-    say('');
-    try{localStorage.setItem('be_guest',JSON.stringify({u:j.username,p:j.password,name}));}catch(e){}
-    _gcFillCreds({u:j.username,p:j.password},j.record);
-  }).catch(()=>{if(btn)btn.disabled=false;say('❌ تعذّر الاتصال بالسيرفر — تأكد من الإنترنت وحاول مرة أخرى');});
+    if(j.ok){finish(j.username,j.password,j.record);return;}
+    if(j._status>=500){viaClient();return;}
+    if(btn)btn.disabled=false;say('❌ '+(j.error||'تعذّر التسجيل — حاول مرة أخرى'));
+  }).catch(()=>viaClient());
 }
 function guestLogin(){
   if(!_gcCred)return;

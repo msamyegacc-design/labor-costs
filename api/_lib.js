@@ -44,41 +44,47 @@ function fromFs(v) {
   if ('mapValue' in v) return Object.fromEntries(Object.entries(v.mapValue.fields || {}).map(([k, x]) => [k, fromFs(x)]));
   return null;
 }
+// كل طلبات Firestore تمر من هنا: نرسل Referer (لو مفتاح الويب مقيّد بالنطاق) ونسجّل سبب الرفض
+async function fsReq(label, url, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({ referer: APP_URL, origin: APP_URL.replace(/\/$/, '') }, opts.headers || {});
+  const r = await _deps.fetch(url, opts);
+  if (!r.ok && r.status !== 404 && r.status !== 409) {
+    let t = ''; try { t = (await r.text()).replace(/\s+/g, ' ').slice(0, 300); } catch (e) {}
+    const e = new Error(label + ' ' + r.status + ' ' + t); e.status = r.status; throw e;
+  }
+  return r;
+}
 const docsUrl = () => `${FS_BASE}/projects/${PROJECT}/databases/(default)/documents`;
 const fieldsOf = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, toFs(v)]));
 const objOf = d => Object.fromEntries(Object.entries((d && d.fields) || {}).map(([k, v]) => [k, fromFs(v)]));
 
 async function fsGet(col, id) {
-  const r = await _deps.fetch(`${docsUrl()}/${col}/${encodeURIComponent(id)}?key=${API_KEY}`);
+  const r = await fsReq('fs get', `${docsUrl()}/${col}/${encodeURIComponent(id)}?key=${API_KEY}`);
   if (r.status === 404) return null;
-  if (!r.ok) throw new Error('fs get ' + r.status);
   return objOf(await r.json());
 }
 async function fsFind(col, field, value) {
-  const r = await _deps.fetch(`${docsUrl()}:runQuery?key=${API_KEY}`, {
+  const r = await fsReq('fs query', `${docsUrl()}:runQuery?key=${API_KEY}`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ structuredQuery: { from: [{ collectionId: col }], limit: 1,
       where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: toFs(value) } } } })
   });
-  if (!r.ok) throw new Error('fs query ' + r.status);
   const rows = await r.json();
   const hit = (rows || []).find(x => x.document);
   return hit ? objOf(hit.document) : null;
 }
 async function fsCreate(col, id, obj) { // true=تم، false=موجود مسبقاً
-  const r = await _deps.fetch(`${docsUrl()}/${col}?documentId=${encodeURIComponent(id)}&key=${API_KEY}`, {
+  const r = await fsReq('fs create', `${docsUrl()}/${col}?documentId=${encodeURIComponent(id)}&key=${API_KEY}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fields: fieldsOf(obj) })
   });
-  if (r.status === 409) return false;
-  if (!r.ok) throw new Error('fs create ' + r.status);
-  return true;
+  return r.status !== 409;
 }
 async function fsPatch(col, id, obj) {
   const mask = Object.keys(obj).map(k => 'updateMask.fieldPaths=' + encodeURIComponent(k)).join('&');
-  const r = await _deps.fetch(`${docsUrl()}/${col}/${encodeURIComponent(id)}?${mask}&key=${API_KEY}`, {
+  await fsReq('fs patch', `${docsUrl()}/${col}/${encodeURIComponent(id)}?${mask}&key=${API_KEY}`, {
     method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fields: fieldsOf(obj) })
   });
-  if (!r.ok) throw new Error('fs patch ' + r.status);
 }
 
 // ── البريد والإشعارات ──
