@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>سيستم حساب تكلفة العمالة | أ/ محمود سامي</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23e8f5e9'/%3E%3Ctext x='32' y='30' font-size='28' text-anchor='middle' dominant-baseline='central'%3E%F0%9F%8D%93%3C/text%3E%3Ctext x='45' y='47' font-size='20' text-anchor='middle' dominant-baseline='central'%3E%F0%9F%91%B7%3C/text%3E%3C/svg%3E">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -613,6 +613,76 @@ tr.audit-glow td:last-child{border-left:2.5px solid #ff9800}
 body.guest-mode #guest-banner{display:block}
 body.guest-mode #tb-dz,body.guest-mode #btn-html-bak,body.guest-mode #btn-beb-bak,body.guest-mode #btn-xl-imp,body.guest-mode #savechip{display:none!important}
 @media print{#guest-banner{display:none!important}}
+
+/* ═══════ RESPONSIVE — لاب توب / تابلت / موبايل ═══════ */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+img,video,canvas,svg{max-width:100%}
+#sb-toggle{display:none;align-items:center;justify-content:center;width:40px;height:40px;flex-shrink:0;
+  border:1px solid var(--border);background:#fff;border-radius:10px;font-size:20px;line-height:1;cursor:pointer;color:var(--dark)}
+#sb-backdrop{display:none;position:fixed;inset:0;background:rgba(8,16,26,.55);z-index:190;backdrop-filter:blur(2px)}
+@media (min-width:1600px){.sb{padding:20px}#mn{font-size:15px}}
+@media (max-width:1280px){
+  :root{--sidebar-w:222px}
+  .sg5,.sg[style*="repeat(6,"]{grid-template-columns:repeat(3,1fr)!important}
+  .sg[style*="repeat(5,"]{grid-template-columns:repeat(3,1fr)!important}
+}
+@media (max-width:1024px){
+  :root{--sidebar-w:200px}
+  .sg4{grid-template-columns:repeat(2,1fr)!important}
+  .sg3{grid-template-columns:repeat(2,1fr)!important}
+  .sg21{grid-template-columns:1fr!important}
+  #tb{flex-wrap:wrap}
+}
+/* تابلت عمودي وموبايل: القائمة الجانبية تنزلق من اليمين */
+@media (max-width:900px){
+  #sb{transform:translateX(105%);transition:transform .28s cubic-bezier(.4,0,.2,1);width:min(290px,84vw);
+    height:100vh;height:100dvh;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);
+    -webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  body.sb-open #sb{transform:translateX(0)}
+  body.sb-open #sb-backdrop{display:block}
+  body.sb-open{overflow:hidden}
+  #mn{margin-right:0!important;width:100%}
+  #sb-toggle{display:flex}
+  #tb{padding:8px 10px;padding-top:calc(8px + env(safe-area-inset-top))}
+  #tb-dz{display:none}
+  .tr{flex:1 1 100%;order:3;overflow-x:auto;flex-wrap:nowrap;padding-bottom:3px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+  .tr>*{flex-shrink:0}
+  .pt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .sg4,.sg3,.sg2,.sg21,.chips{grid-template-columns:repeat(2,1fr)!important}
+  .sg[style*="grid-template-columns"]{grid-template-columns:repeat(2,1fr)!important}
+  .sc,.cc{max-width:100%}
+  .sc{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .dt{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;max-width:100%}
+  .sh{flex-wrap:wrap}
+  .modal{min-width:0!important;width:calc(100vw - 20px)!important;max-width:none!important;
+    max-height:calc(100dvh - 20px);max-height:calc(100vh - 20px)}
+  .ov{padding:10px}
+  .disc-row{grid-template-columns:1fr 1fr!important}
+  [style*="grid-template-columns"]:not(.sg):not(.chips){grid-template-columns:1fr 1fr!important}
+}
+@media (max-width:600px){
+  .sg4,.sg3,.sg2,.sg21,.chips,.sg[style*="grid-template-columns"]{grid-template-columns:1fr 1fr!important}
+  .sb{padding:12px}
+  .cc{padding:13px 13px}
+  .sh{padding:10px 12px}
+  .pt{font-size:13.5px}
+  .perm-grid{grid-template-columns:1fr!important}
+  .disc-row{grid-template-columns:1fr!important}
+  [style*="grid-template-columns"]:not(.sg):not(.chips){grid-template-columns:1fr!important}
+  /* منع تكبير iOS التلقائي عند التركيز على الحقول + أزرار مريحة للّمس */
+  input,select,textarea{font-size:16px!important}
+  .btn,button,.ni{min-height:38px}
+  #login-ov{padding:12px;align-items:flex-start;overflow-y:auto}
+  .login-box{width:100%!important;max-width:100%!important;margin:auto}
+}
+@media (max-width:380px){
+  .sg4,.sg3,.sg2,.sg21,.chips,.sg[style*="grid-template-columns"]{grid-template-columns:1fr!important}
+}
+@media (max-height:520px) and (orientation:landscape){
+  #login-ov{align-items:flex-start;overflow-y:auto}
+  .login-box{margin:auto}
+}
+@media (hover:none){.btn:hover,.ni:hover{transform:none}}
 </style>
 </head>
 <body>
@@ -724,6 +794,7 @@ body.guest-mode #tb-dz,body.guest-mode #btn-html-bak,body.guest-mode #btn-beb-ba
   </div>
 </div>
 <!-- SIDEBAR -->
+<div id="sb-backdrop" onclick="sbClose()"></div>
 <aside id="sb" class="hidden">
   <div class="logo">
     <div class="lr">🍓</div>
@@ -739,6 +810,7 @@ body.guest-mode #tb-dz,body.guest-mode #btn-html-bak,body.guest-mode #btn-beb-ba
 <!-- MAIN -->
 <div id="mn" class="hidden">
   <div id="tb">
+    <button id="sb-toggle" class="no-print" onclick="sbToggle()" aria-label="القائمة">☰</button>
     <div class="pt" id="ptit"><span>📊</span>لوحة التحكم</div>
     <div id="tb-dz"
       ondragover="event.preventDefault();this.classList.add('on')"
@@ -7366,6 +7438,16 @@ if(_sess&&gUser(parseInt(_sess))){SESSION=parseInt(_sess);
   // امسح أي باسورد محفوظ تلقائياً من المتصفح لتجنّب دخول خاطئ
   setTimeout(()=>{const lp=document.getElementById('lpass');if(lp)lp.value='';const cp=document.getElementById('lg-company-pass');if(cp)cp.value='';},300);
   populateLoginSeasons();resetLoginScreen();}
+
+/* ── القائمة الجانبية على الموبايل/التابلت ── */
+function sbToggle(){document.body.classList.toggle('sb-open')}
+function sbClose(){document.body.classList.remove('sb-open')}
+(function(){
+  var _nt=window.navTo;
+  if(typeof _nt==='function'){window.navTo=function(p){sbClose();return _nt.apply(this,arguments)}}
+  window.addEventListener('resize',function(){if(window.innerWidth>900)sbClose()});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')sbClose()});
+})();
 </script>
 </body>
 </html>
