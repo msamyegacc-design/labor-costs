@@ -602,6 +602,11 @@ tr.audit-glow td:last-child{border-left:2.5px solid #ff9800}
 .lg-guest-card .gc-row{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(0,0,0,.25);border-radius:9px;padding:7px 10px;margin-bottom:6px;font-size:11px;color:rgba(255,255,255,.7)}
 .lg-guest-card .gc-row b{font-family:monospace;letter-spacing:.5px;font-size:13px;color:#fff;direction:ltr;user-select:all}
 .lg-guest-card .gc-note{font-size:9.5px;color:rgba(255,255,255,.55);line-height:1.6;margin:6px 0 9px}
+.lg-guest-card .gc-in{width:100%;box-sizing:border-box;margin-bottom:7px;padding:9px 11px;border-radius:9px;border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.28);color:#fff;font-family:inherit;font-size:12px;outline:none}
+.lg-guest-card .gc-in:focus{border-color:#ffca28}
+.lg-guest-card .gc-msg{font-size:10.5px;margin-top:7px;min-height:14px;color:#ff8a80;font-weight:700}
+.gs-bd{display:inline-block;border-radius:8px;padding:2px 9px;font-size:10.5px;font-weight:900;white-space:nowrap}
+.gs-act{background:#e8f5e9;color:#1b5e20}.gs-exp{background:#fff3e0;color:#e65100}.gs-sus{background:#ffebee;color:#c62828}
 .lg-guest-go{width:100%;padding:10px;border:none;border-radius:11px;cursor:pointer;background:linear-gradient(135deg,#f9a825,#ff8f00);color:#1a1200;font-weight:900;font-size:12.5px;font-family:inherit}
 .lg-guest-go:hover{filter:brightness(1.08)}
 #guest-banner{display:none;position:fixed;bottom:12px;left:12px;z-index:8000;background:linear-gradient(135deg,#f9a825,#ff8f00);color:#1a1200;font-weight:900;font-size:11px;padding:7px 14px;border-radius:20px;box-shadow:0 4px 14px rgba(0,0,0,.3);pointer-events:none}
@@ -698,13 +703,23 @@ body.guest-mode #tb-dz,body.guest-mode #btn-html-bak,body.guest-mode #btn-beb-ba
     <button class="lg-login-btn" onclick="doLogin()">🔐 دخول النظام</button>
     <div id="lerr" style="color:#ff5252;font-size:11.5px;text-align:center;margin-top:12px;display:none;font-weight:700"></div>
     <!-- ═══ التسجيل كضيف (بيانات وهمية) ═══ -->
-    <button type="button" class="lg-guest-btn" id="lg-guest-btn" onclick="showGuestCreds()">👤 التسجيل كضيف (تجربة ببيانات وهمية)</button>
+    <button type="button" class="lg-guest-btn" id="lg-guest-btn" onclick="showGuestCreds()">👤 التسجيل كضيف (تجربة مجانية 7 أيام)</button>
     <div id="lg-guest-card" class="lg-guest-card" style="display:none">
-      <div class="gc-t">🎭 بيانات دخول الضيف</div>
-      <div class="gc-row"><span>اسم المستخدم</span><b id="gu-user"></b></div>
-      <div class="gc-row"><span>كلمة المرور</span><b id="gu-pass"></b></div>
-      <div class="gc-note">بيانات تجريبية فقط — لا تظهر بيانات الشركة الحقيقية، ولا يُحفظ أي تعديل، والمستخدمون والإعدادات وفحص النظام غير متاحة للضيف.</div>
-      <button type="button" class="lg-guest-go" onclick="guestLogin()">▶ دخول بهذه البيانات</button>
+      <div id="gc-form">
+        <div class="gc-t">🎭 تسجيل ضيف — نسخة تجريبية 7 أيام</div>
+        <input id="gc-name" class="gc-in" type="text" maxlength="40" placeholder="الاسم" autocomplete="off">
+        <input id="gc-phone" class="gc-in" type="tel" inputmode="tel" maxlength="16" placeholder="رقم الموبايل" autocomplete="off" style="direction:ltr;text-align:right">
+        <div class="gc-note">سنعطيك اسم مستخدم وكلمة مرور للتجربة. البيانات المعروضة وهمية بالكامل.</div>
+        <button type="button" class="lg-guest-go" id="gc-reg-btn" onclick="guestRegister()">✅ تسجيل والحصول على بيانات الدخول</button>
+        <div id="gc-msg" class="gc-msg"></div>
+      </div>
+      <div id="gc-done" style="display:none">
+        <div class="gc-t">✅ بيانات دخول الضيف</div>
+        <div class="gc-row"><span>اسم المستخدم</span><b id="gu-user"></b></div>
+        <div class="gc-row"><span>كلمة المرور</span><b id="gu-pass"></b></div>
+        <div class="gc-note" id="gc-exp"></div>
+        <button type="button" class="lg-guest-go" onclick="guestLogin()">▶ دخول بهذه البيانات</button>
+      </div>
     </div>
     <button type="button" class="lg-back-btn" onclick="gotoConnectView()">← رجوع إلى الربط السحابي بالشركة</button>
     </div><!-- /lg-view-login -->
@@ -892,6 +907,8 @@ const FIREBASE_CONFIG={
 };
 const SYNC_COLLECTIONS=['tickets','contractors','sites','sectors','workTypes'];
 let cloudDb=null,cloudReady=false,cloudSeeded={},SUPPRESS_PUSH=false,cloudUnsubs=[];
+let FSDB=null; // مرجع Firestore ثابت (لا يُفصل أثناء جلسة الضيف) — يُستخدم لسجل الضيوف فقط
+const GUEST_REG='__guests_registry__'; // سجل عام لحسابات الضيوف التجريبية (7 أيام) — مستقل عن أكواد الشركات
 const COMPANY_REGISTRY='__companies_registry__'; // سجل عام لأكواد الشركات
 // ── حماية البيانات: tombstones (علامات حذف متعمّد) + هوية الجهاز + IP + مراقبة الأدمن ──
 let TOMBSTONES={};               // {col: Set(ids)} — تُحمَّل من السحابة؛ الحذف المتعمّد فقط
@@ -1173,7 +1190,7 @@ function initCloud(){
   try{
     if(typeof firebase==='undefined'){setCloudChip('err');return;}
     firebase.initializeApp(FIREBASE_CONFIG);
-    cloudDb=firebase.firestore();
+    cloudDb=firebase.firestore();FSDB=cloudDb;
     cloudReady=true;setCloudChip('ok');
     subscribeAll();
   }catch(e){console.error('initCloud',e);setCloudChip('err');}
@@ -1267,8 +1284,12 @@ function subscribeAdminMonitors(){
       try{cloudDb.collection(tenantCol('activity')).limit(400).onSnapshot(s2=>{ADMIN_ACTIVITY=s2.docs.map(d=>d.data()).sort((a,b)=>(b.ts||'').localeCompare(a.ts||''));renderAdminActivity();},()=>{});}catch(_e){}
     });
     adminMonUnsubs.push(u1,u2);
+    // قائمة الضيوف (النسخة التجريبية) لحظياً
+    const u3=cloudDb.collection(GUEST_REG).onSnapshot(s=>{ADMIN_GUESTS=s.docs.map(d=>d.data());renderAdminGuests();},e=>{});
+    adminMonUnsubs.push(u3);
   }catch(e){}
 }
+let ADMIN_GUESTS=[];
 // ═══ شبكة أمان محلية: نسخة استرجاع تلقائية لا تُفقد البيانات حتى لو مُسحت محلياً ═══
 function guardBackup(){
   try{
@@ -1579,7 +1600,8 @@ function migrateTkt(t){
 }
 function gUser(id){return ST.users.find(u=>u.id==id)}
 function curUser(){return SESSION?gUser(SESSION):null}
-function can(p){const u=curUser();if(!u)return false;if(u.perms&&u.perms.includes('all'))return true;return u.perms&&u.perms.includes(p)}
+function can(p){if(p==='guestsadm')return SESSION===1&&!GUEST_MODE;   // إدارة الضيوف: المدير الأساسي فقط
+  const u=curUser();if(!u)return false;if(u.perms&&u.perms.includes('all'))return true;return u.perms&&u.perms.includes(p)}
 function guard(p){if(!can(p)){toast('ليس لديك صلاحية لهذا الإجراء','er');return false}return true}
 function autoSave(){
   localStorage.setItem('be3',JSON.stringify(ST));
@@ -1628,9 +1650,9 @@ function doLogin(){
   const err=document.getElementById('lerr');
   // مطابقة اسم المستخدم غير حساسة لحالة الأحرف والمسافات (أكثر تسامحاً)
   const uNorm=user.toLowerCase().replace(/\s+/g,' ');
-  // دخول الضيف: بيانات وهمية ثابتة (غير موجودة في جدول المستخدمين الحقيقي)
-  if(uNorm===GUEST_USER&&pass===GUEST_PASS){startGuestSession();return;}
   const u=ST.users.find(x=>String(x.username||'').trim().toLowerCase().replace(/\s+/g,' ')===uNorm&&x.password===hpw(pass)&&x.active!==false);
+  // حساب ضيف (تجربة 7 أيام): يُتحقق منه من السجل السحابي فقط، ولا يوجد في جدول المستخدمين الحقيقي
+  if(!u&&/^guest\d{3,}$/.test(uNorm)){guestAuthAndStart(uNorm,pass);return;}
   if(!u){if(err){err.style.display='block';err.textContent='اسم المستخدم أو كلمة المرور غير صحيحة';}return;}
   // الموسم المختار من شاشة الدخول
   const seasonSel=document.getElementById('lg-season');
@@ -1964,7 +1986,7 @@ function dc(k){if(CH[k]){CH[k].destroy();delete CH[k]}}
 // ═══════════════ NAV ═══════════════
 const PAGE_ICON={'dash':'📊','addtkt':'📝','tkts':'📋','cons':'👷','sites':'🗺️','wts':'⚙️',
   'analysis':'🔬','mega':'🧠','rday':'📅','rper':'📆','rmon':'📈','rsite':'🗺️','rsec':'🌾','rcon':'🧾',
-  'rwt':'📊','users':'👤','settings':'🛠️','datatools':'📦','audit':'🩺'};
+  'rwt':'📊','users':'👤','settings':'🛠️','datatools':'📦','audit':'🩺','guests':'👥'};
 function pageLabel(p){
   switch(p){
     case'dash':return'لوحة التحكم';
@@ -1986,13 +2008,14 @@ function pageLabel(p){
     case'settings':return'إعدادات النظام';
     case'datatools':return'استيراد وتصدير البيانات';
     case'audit':return'فحص النظام (سجل التدقيق)';
+    case'guests':return'الضيوف (النسخة التجريبية)';
     default:return p;
   }
 }
 function pageFullTitle(p){return`${PAGE_ICON[p]||'📄'} ${pageLabel(p)}`;}
 const PSECTION={'dash':'الرئيسية','addtkt':'العمالة','tkts':'العمالة','cons':'الإدارة','sites':'الإدارة',
   'wts':'الإدارة','analysis':'التحليل','mega':'التحليل','rday':'التقارير','rper':'التقارير','rmon':'التقارير',
-  'rsite':'التقارير','rsec':'التقارير','rcon':'التقارير','rwt':'التقارير','users':'النظام','settings':'النظام','datatools':'النظام','audit':'النظام'};
+  'rsite':'التقارير','rsec':'التقارير','rcon':'التقارير','rwt':'التقارير','users':'النظام','settings':'النظام','datatools':'النظام','audit':'النظام','guests':'النظام'};
 function renderNav(){
   const nav=document.getElementById('nav');if(!nav)return;
   const groups=[
@@ -2001,7 +2024,7 @@ function renderNav(){
     {g:'الإدارة',items:[['cons'],['sites'],['wts']]},
     {g:'التحليل',items:[['analysis'],['mega']]},
     {g:'التقارير',items:[['rday'],['rper'],['rmon'],['rsite'],['rsec'],['rcon'],['rwt']]},
-    {g:'النظام',items:[['users','users'],['settings','settings'],['audit','settings']]}
+    {g:'النظام',items:[['users','users'],['settings','settings'],['audit','settings'],['guests','guestsadm']]}
   ];
   nav.innerHTML=groups.map(grp=>{
     const items=grp.items.map(([p,req])=>{
@@ -2119,6 +2142,7 @@ function _renderInner(p){
     case'settings':if(can('settings')){if(SETTINGS_UNLOCKED)pgSettings();else askSettingsPass('settings');}break;
     case'datatools':if(can('settings')){if(SETTINGS_UNLOCKED)pgDataTools();else askSettingsPass('datatools');}break;
     case'audit':if(can('settings'))pgAudit();break;
+    case'guests':if(can('guestsadm'))pgGuests();break;
   }
 }
 // ═══════════════ DASHBOARD ═══════════════
@@ -6802,19 +6826,99 @@ function pgAudit(){
 //   وتُمنع أي كتابة في localStorage — فلا تتأثر البيانات الحقيقية إطلاقاً.
 // • عند تسجيل الخروج تعود البيانات الحقيقية والمزامنة السحابية كما كانت.
 // • الضيف لا يرى: المستخدمون والصلاحيات / إعدادات النظام / فحص النظام (سجل التدقيق).
-const GUEST_USER='guest_demo',GUEST_PASS='Guest@2026',GUEST_ID=9001;
+const GUEST_ID=9001,GUEST_TRIAL_DAYS=7,GUEST_CONTACT='01119309346';
 const GUEST_BLOCKED_PERMS=['users','settings'];   // 'audit' و 'datatools' يعتمدان على صلاحية settings
-let _GUEST_BAK=null;
+let _GUEST_BAK=null,GUEST_REC=null,GUEST_UNSUB=null,GUEST_TIMER=null,_gcCred=null;
+const gEsc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function guestStatus(g){
+  if(!g)return'expired';
+  if(g.status==='suspended')return'suspended';
+  const e=Date.parse(g.expiresAt||'');
+  if(!e||Date.now()>e)return'expired';
+  return'active';
+}
+function guestDaysLeft(g){const e=Date.parse(g&&g.expiresAt||'');return e?Math.max(0,Math.ceil((e-Date.now())/86400000)):0;}
+function guestBlockMsg(st){
+  return st==='suspended'?'⛔ تم إيقاف حسابك التجريبي من الإدارة — للتواصل: '+GUEST_CONTACT
+    :'⌛ انتهت فترة التجربة ('+GUEST_TRIAL_DAYS+' أيام) — للتمديد تواصل مع الإدارة: '+GUEST_CONTACT;
+}
+function _gcShow(done){
+  const f=document.getElementById('gc-form'),d=document.getElementById('gc-done');
+  if(f)f.style.display=done?'none':'block';if(d)d.style.display=done?'block':'none';
+}
+function _gcFillCreds(c,rec){
+  _gcCred=c;
+  const u=document.getElementById('gu-user'),p=document.getElementById('gu-pass'),e=document.getElementById('gc-exp');
+  if(u)u.textContent=c.u;if(p)p.textContent=c.p;
+  if(e){
+    if(rec){const st=guestStatus(rec);
+      e.textContent=st==='active'?'⏳ متبقي '+guestDaysLeft(rec)+' يوم من التجربة — بيانات تجريبية فقط، لا يُحفظ أي تعديل، ولا تظهر بيانات الشركة.':guestBlockMsg(st);
+    }else e.textContent='⏳ تجربة مجانية '+GUEST_TRIAL_DAYS+' أيام — بيانات تجريبية فقط، لا يُحفظ أي تعديل، ولا تظهر بيانات الشركة. احتفظ بهذه البيانات.';
+  }
+  _gcShow(true);
+}
 function showGuestCreds(){
-  const u=document.getElementById('gu-user'),p=document.getElementById('gu-pass');
-  if(u)u.textContent=GUEST_USER;if(p)p.textContent=GUEST_PASS;
   const c=document.getElementById('lg-guest-card'),b=document.getElementById('lg-guest-btn');
   if(c)c.style.display='block';if(b)b.style.display='none';
+  // ضيف سبق تسجيله على هذا الجهاز: اعرض بياناته (مع حالة التجربة الحالية)
+  let saved=null;try{saved=JSON.parse(localStorage.getItem('be_guest')||'null');}catch(e){}
+  if(saved&&saved.u&&saved.p){
+    _gcFillCreds(saved,null);
+    if(FSDB){FSDB.collection(GUEST_REG).doc(saved.u).get().then(d=>{if(d.exists)_gcFillCreds(saved,d.data());}).catch(()=>{});}
+  }else _gcShow(false);
+}
+function guestRegister(){
+  const msg=document.getElementById('gc-msg'),btn=document.getElementById('gc-reg-btn');
+  const say=t=>{if(msg)msg.textContent=t||'';};
+  const name=(document.getElementById('gc-name')?.value||'').replace(/[<>&"'`]/g,'').trim().slice(0,40);
+  const phone=(document.getElementById('gc-phone')?.value||'').replace(/[^\d+]/g,'').slice(0,16);
+  if(name.length<2){say('اكتب اسمك');return;}
+  if(!/^\+?\d{10,15}$/.test(phone)){say('اكتب رقم موبايل صحيح');return;}
+  if(!FSDB){say('التسجيل يحتاج اتصالاً بالإنترنت — حاول مرة أخرى');return;}
+  if(btn)btn.disabled=true;say('⏳ جارٍ التسجيل...');
+  const reg=FSDB.collection(GUEST_REG);
+  reg.where('phone','==',phone).limit(1).get().then(snap=>{
+    if(!snap.empty){say('هذا الرقم مسجّل كضيف من قبل — تواصل مع الإدارة: '+GUEST_CONTACT);if(btn)btn.disabled=false;return;}
+    const tryCreate=(n)=>{
+      const uname='guest'+String(Math.floor(1000+Math.random()*9000));
+      const al='abcdefghjkmnpqrstuvwxyz23456789';let pass='';
+      const rb=new Uint32Array(6);(window.crypto||{getRandomValues:a=>a.forEach((_,i)=>a[i]=Math.floor(Math.random()*4294967296))}).getRandomValues(rb);
+      for(let i=0;i<6;i++)pass+=al[rb[i]%al.length];
+      return reg.doc(uname).get().then(d=>{
+        if(d.exists){if(n>5)throw new Error('تعذّر إنشاء الحساب، حاول مرة أخرى');return tryCreate(n+1);}
+        const now=new Date();
+        const rec={username:uname,passHash:hpw(pass),name,phone,createdAt:now.toISOString(),
+          expiresAt:new Date(now.getTime()+GUEST_TRIAL_DAYS*86400000).toISOString(),status:'active',
+          lastLogin:'',loginCount:0,extendedCount:0,deviceId:DEVICE_ID,ip:MY_IP||'',ua:navigator.userAgent||''};
+        return reg.doc(uname).set(rec).then(()=>({uname,pass,rec}));
+      });
+    };
+    return tryCreate(0).then(r=>{
+      try{localStorage.setItem('be_guest',JSON.stringify({u:r.uname,p:r.pass,name}));}catch(e){}
+      say('');_gcFillCreds({u:r.uname,p:r.pass},r.rec);if(btn)btn.disabled=false;
+    });
+  }).catch(e=>{say('❌ '+(e&&e.message?e.message:'تعذّر التسجيل — تأكد من الاتصال'));if(btn)btn.disabled=false;});
 }
 function guestLogin(){
+  if(!_gcCred)return;
   const u=document.getElementById('luser'),p=document.getElementById('lpass');
-  if(u)u.value=GUEST_USER;if(p)p.value=GUEST_PASS;
+  if(u)u.value=_gcCred.u;if(p)p.value=_gcCred.p;
   doLogin();
+}
+function guestAuthAndStart(uname,pass){
+  const err=document.getElementById('lerr');
+  const say=(t,info)=>{if(err){err.style.display='block';err.style.color=info?'#ffd54f':'#ff5252';err.textContent=t;}};
+  if(!FSDB){say('حساب الضيف يحتاج اتصالاً بالإنترنت للتحقق');return;}
+  say('⏳ جارٍ التحقق من حساب الضيف...',true);
+  const ref=FSDB.collection(GUEST_REG).doc(uname);
+  ref.get().then(d=>{
+    if(!d.exists||d.data().passHash!==hpw(pass)){say('اسم المستخدم أو كلمة المرور غير صحيحة');return;}
+    const g=d.data(),st=guestStatus(g);
+    if(st!=='active'){say(guestBlockMsg(st));return;}
+    if(err){err.style.display='none';err.style.color='#ff5252';}
+    ref.set({lastLogin:new Date().toISOString(),loginCount:(g.loginCount||0)+1,deviceId:DEVICE_ID,ip:MY_IP||'',ua:navigator.userAgent||''},{merge:true}).catch(()=>{});
+    startGuestSession(g);
+  }).catch(()=>say('تعذّر التحقق — تأكد من الاتصال بالإنترنت'));
 }
 function buildGuestState(){
   let seed=20260101;const rnd=()=>{seed=(seed*1664525+1013904223)%4294967296;return seed/4294967296;};
@@ -6864,7 +6968,7 @@ function buildGuestState(){
   }
   return{
     sectors,sites,workTypes,contractors,tickets,
-    users:[{id:GUEST_ID,username:GUEST_USER,password:hpw(GUEST_PASS),name:'ضيف تجريبي',role:'ضيف (عرض تجريبي)',
+    users:[{id:GUEST_ID,username:(GUEST_REC&&GUEST_REC.username)||'guest',password:hpw('x'+Math.random()),name:(GUEST_REC&&GUEST_REC.name)||'ضيف تجريبي',role:'ضيف (عرض تجريبي)',
       phone:'',dept:'',email:'',photo:'',perms:ALL_PERM_IDS.filter(p=>!GUEST_BLOCKED_PERMS.includes(p)),active:true,isAdmin:false}],
     settings:{companyName:'شركة تجريبية (Demo)',companySubtitle:'نظام تكاليف العمالة الزراعية',logo:'🧪',logoImg:'',
       industry:'agri',tenantCode:'DEMOGUEST',creditLine:'إعداد وتطوير: أ/ محمود سامي',creditPhone:'01119309346',
@@ -6894,6 +6998,9 @@ function exitGuestMode(){
   if(!GUEST_MODE||!_GUEST_BAK)return;
   const b=_GUEST_BAK;_GUEST_BAK=null;
   GUEST_MODE=false;
+  if(GUEST_UNSUB){try{GUEST_UNSUB();}catch(e){}GUEST_UNSUB=null;}
+  if(GUEST_TIMER){clearInterval(GUEST_TIMER);GUEST_TIMER=null;}
+  GUEST_REC=null;
   document.body.classList.remove('guest-mode');
   ST=b.ST;UNDO=b.UNDO;EDIT_TKT=null;ACTIVE_SEASON=b.ACTIVE_SEASON;
   TOMBSTONES=b.TOMBSTONES;SUPPRESS_PUSH=b.SUPPRESS_PUSH;
@@ -6902,14 +7009,126 @@ function exitGuestMode(){
   setCloudChip(cloudReady?'ok':'err');
   const ub=document.getElementById('ubtn');if(ub)ub.disabled=UNDO.length===0;
 }
-function startGuestSession(){
+function updateGuestBanner(){
+  const el=document.getElementById('guest-banner');if(!el||!GUEST_REC)return;
+  el.textContent='🧪 وضع الضيف — متبقي '+guestDaysLeft(GUEST_REC)+' يوم من التجربة • بيانات وهمية، لا يتم حفظ أي تعديل';
+}
+// قطع جلسة الضيف فوراً (انتهاء/إيقاف/حذف) ثم الرجوع لشاشة الدخول مع رسالة واضحة
+function guestKick(text){
+  if(!GUEST_MODE)return;
+  doLogout();
+  setTimeout(()=>{const e=document.getElementById('lerr');if(e){e.style.display='block';e.style.color='#ff5252';e.textContent=text;}},60);
+}
+function startGuestSession(rec){
+  GUEST_REC=Object.assign({},rec||{});
   enterGuestMode();
   SESSION=GUEST_ID;                      // لا نحفظ be_sess: إعادة تحميل الصفحة تعيد لشاشة الدخول
+  // مراقبة لحظية لحساب الضيف: أي إيقاف/حذف/انتهاء من الأدمن يقطع الجلسة فوراً
+  const uname=GUEST_REC.username;
+  if(FSDB&&uname){
+    try{
+      GUEST_UNSUB=FSDB.collection(GUEST_REG).doc(uname).onSnapshot(d=>{
+        if(!GUEST_MODE||!GUEST_REC||GUEST_REC.username!==uname)return;
+        if(!d.exists){guestKick('⛔ تم حذف حسابك التجريبي من الإدارة — للتواصل: '+GUEST_CONTACT);return;}
+        GUEST_REC=Object.assign({},d.data());
+        const st=guestStatus(GUEST_REC);
+        if(st!=='active'){guestKick(guestBlockMsg(st));return;}
+        updateGuestBanner();
+      },()=>{});
+    }catch(e){}
+  }
+  GUEST_TIMER=setInterval(()=>{
+    if(!GUEST_MODE||!GUEST_REC)return;
+    const st=guestStatus(GUEST_REC);
+    if(st!=='active')guestKick(guestBlockMsg(st));else updateGuestBanner();
+  },20000);
   document.getElementById('login-ov').classList.add('hide');
   document.getElementById('sb').classList.remove('hidden');
   document.getElementById('mn').classList.remove('hidden');
   applyBranding();applyNavPerms();updateSbUser();updatePageTitle('dash');updateBreadcrumb('dash');render('dash');
-  toast('مرحباً بك كضيف 👋 — بيانات تجريبية فقط');
+  updateGuestBanner();
+  toast('مرحباً '+(GUEST_REC.name||'بك')+' 👋 — متبقي '+guestDaysLeft(GUEST_REC)+' يوم من التجربة');
+}
+
+// ═══════════════ إدارة الضيوف — للمدير الأساسي فقط ═══════════════
+function pgGuests(){
+  if(!can('guestsadm'))return;
+  document.getElementById('ct').innerHTML=
+    '<div class="ph"><h1>'+brandTitle()+'</h1><h2>👥 الضيوف — النسخة التجريبية ('+GUEST_TRIAL_DAYS+' أيام)</h2><p>'+CREDIT()+' | '+ar(td())+'</p></div>'+
+    '<div id="gs-wrap"><div class="sc"><div class="sb" style="padding:20px;text-align:center;color:var(--muted)">⏳ جارٍ تحميل الضيوف...</div></div></div>';
+  if(!cloudReady)setTimeout(()=>{const w=document.getElementById('gs-wrap');if(w&&!ADMIN_GUESTS.length)w.innerHTML='<div class="sc"><div class="sb" style="padding:20px;text-align:center;color:#c62828">🔴 لا يوجد اتصال بالإنترنت — لا يمكن عرض الضيوف</div></div>';},400);
+  renderAdminGuests();
+}
+function renderAdminGuests(){
+  const w=document.getElementById('gs-wrap');if(!w||CUR!=='guests'||!can('guestsadm'))return;
+  const list=ADMIN_GUESTS.slice().sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+  const cnt={active:0,expired:0,suspended:0};list.forEach(g=>{cnt[guestStatus(g)]++;});
+  const lbl={active:'✅ نشط',expired:'⌛ منتهي',suspended:'⛔ موقوف'},cls={active:'gs-act',expired:'gs-exp',suspended:'gs-sus'};
+  const fmt=iso=>{if(!iso)return'—';const d=new Date(iso);if(isNaN(d))return'—';return d.toLocaleDateString('ar-EG',{year:'numeric',month:'short',day:'numeric'})+' '+d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});};
+  const card=(n,t,c)=>'<div style="flex:1;min-width:120px;background:#fff;border:1.5px solid '+c+';border-radius:12px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:900;color:'+c+'">'+n+'</div><div style="font-size:11px;color:var(--muted);font-weight:800">'+t+'</div></div>';
+  const rows=list.map((g,i)=>{
+    const st=guestStatus(g),u=gEsc(g.username),days=guestDaysLeft(g);
+    let wa=String(g.phone||'').replace(/\D/g,'');if(wa.startsWith('0'))wa='2'+wa;
+    return '<tr>'+
+      '<td style="color:var(--muted)">'+(i+1)+'</td>'+
+      '<td style="font-weight:800">'+gEsc(g.name)+'</td>'+
+      '<td style="direction:ltr;text-align:right;font-family:monospace">'+gEsc(g.phone)+'</td>'+
+      '<td style="font-family:monospace;color:#0d47a1;font-weight:800">'+u+'</td>'+
+      '<td style="font-size:10.5px">'+fmt(g.createdAt)+'</td>'+
+      '<td style="font-size:10.5px">'+fmt(g.expiresAt)+'</td>'+
+      '<td style="font-weight:900;color:'+(st==='active'?(days<=2?'#e65100':'#1b5e20'):'#c62828')+'">'+(st==='active'?days+' يوم':'—')+'</td>'+
+      '<td><span class="gs-bd '+cls[st]+'">'+lbl[st]+'</span></td>'+
+      '<td style="font-size:10.5px">'+fmt(g.lastLogin)+'</td>'+
+      '<td style="text-align:center">'+(g.loginCount||0)+'</td>'+
+      '<td class="nc" style="white-space:nowrap">'+
+        '<button class="btn bgr bxs" onclick="adminGuestExtend(\''+u+'\',7)">➕ 7 أيام</button> '+
+        '<button class="btn bbl bxs" onclick="adminGuestExtend(\''+u+'\',30)">➕ 30 يوم</button> '+
+        '<button class="btn bor bxs" onclick="adminGuestExtend(\''+u+'\',0)">📅 مخصص</button> '+
+        (g.status==='suspended'
+          ?'<button class="btn bgr bxs" onclick="adminGuestToggle(\''+u+'\')">▶ تفعيل</button> '
+          :'<button class="btn bre bxs" onclick="adminGuestToggle(\''+u+'\')">⛔ قطع</button> ')+
+        (wa?'<a class="btn bxs" style="text-decoration:none;background:#25d366;color:#fff" target="_blank" rel="noopener" href="https://wa.me/'+wa+'">💬</a> ':'')+
+        '<button class="btn bre bxs" onclick="adminGuestDelete(\''+u+'\')">🗑️</button>'+
+      '</td></tr>';
+  }).join('');
+  w.innerHTML='<div class="sc"><div class="sh"><h2>👥 كل الضيوف المسجّلين</h2></div><div class="sb">'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'+card(list.length,'إجمالي الضيوف','#0d47a1')+card(cnt.active,'نشط','#2e7d32')+card(cnt.expired,'منتهي','#e65100')+card(cnt.suspended,'موقوف','#c62828')+'</div>'+
+    (list.length?'<div style="overflow-x:auto"><table class="dt" style="min-width:980px"><thead><tr><th>#</th><th>الاسم</th><th>الموبايل</th><th>اسم المستخدم</th><th>تاريخ التسجيل</th><th>ينتهي في</th><th>المتبقي</th><th>الحالة</th><th>آخر دخول</th><th>مرات الدخول</th><th class="nc">إجراءات</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+      :'<div style="padding:18px;text-align:center;color:var(--muted)">لا يوجد ضيوف مسجّلون بعد.</div>')+
+    '<div class="info" style="margin-top:13px">ℹ️ التمديد يُضاف على تاريخ الانتهاء الحالي (أو من الآن لو انتهى). "قطع" يوقف الضيف فوراً ويُخرجه من جلسته الحالية، و"تفعيل" يعيده.</div>'+
+  '</div></div>';
+}
+function _gAdminRef(u){
+  if(!can('guestsadm')){toast('للمدير الأساسي فقط','er');return null;}
+  if(!/^guest\d{3,}$/.test(String(u))||!cloudReady||!cloudDb){toast('لا يوجد اتصال سحابي','er');return null;}
+  return cloudDb.collection(GUEST_REG).doc(u);
+}
+function adminGuestExtend(u,days){
+  const ref=_gAdminRef(u);if(!ref)return;
+  if(!days){
+    const v=prompt('عدد أيام التمديد (1 – 365):','7');if(v===null)return;
+    days=parseInt(v,10);if(!(days>=1&&days<=365)){toast('اكتب عدد أيام بين 1 و 365','er');return;}
+  }
+  ref.get().then(d=>{
+    if(!d.exists){toast('الحساب غير موجود','er');return;}
+    const g=d.data(),base=Math.max(Date.now(),Date.parse(g.expiresAt||'')||0);
+    return ref.set({expiresAt:new Date(base+days*86400000).toISOString(),extendedCount:(g.extendedCount||0)+1},{merge:true})
+      .then(()=>toast('✅ تم تمديد '+gEsc(g.name||u)+' '+days+' يوم','ok'));
+  }).catch(e=>toast('فشل التمديد: '+(e.message||''),'er'));
+}
+function adminGuestToggle(u){
+  const ref=_gAdminRef(u);if(!ref)return;
+  ref.get().then(d=>{
+    if(!d.exists){toast('الحساب غير موجود','er');return;}
+    const g=d.data(),sus=g.status!=='suspended';
+    if(sus&&!confirm('قطع النظام عن "'+(g.name||u)+'" فوراً؟'))return;
+    return ref.set({status:sus?'suspended':'active'},{merge:true}).then(()=>toast(sus?'⛔ تم قطع النظام عن الضيف':'✅ تم تفعيل الضيف',sus?'wa':'ok'));
+  }).catch(e=>toast('فشل العملية: '+(e.message||''),'er'));
+}
+function adminGuestDelete(u){
+  const ref=_gAdminRef(u);if(!ref)return;
+  if(!confirm('حذف حساب الضيف "'+u+'" نهائياً؟ سيُقطع فوراً ويمكنه التسجيل من جديد.'))return;
+  ref.delete().then(()=>toast('🗑️ تم حذف الضيف','wa')).catch(e=>toast('فشل الحذف: '+(e.message||''),'er'));
 }
 // ═══════════════ INIT ═══════════════
 ld();
